@@ -1,0 +1,34 @@
+# Özet PRD: Binance Spot Grid Bot Uygulaması
+
+## 1. Proje Amacı
+Mevcut manuel grid bot stratejisini otomatikleştiren, TypeScript ile geliştirilmiş bir konsol uygulaması oluşturmak.
+
+## 2. Temel Özellikler
+- **Ticaret Modları**:
+  - **Backtest**: Geçmiş verilerle strateji simülasyonu.
+  - **Papertrade**: Canlı piyasa verileriyle sanal para ile işlem.
+  - **Live**: Gerçek para ile Binance Spot üzerinde canlı işlem.
+
+- **Strateji**:
+  - **Dinamik Grid**: ATR veya Ortalama Bar Farkı'na göre grid aralığı belirleme.
+  - **DCA Entegrasyonu**: Kademeli alım miktarları ile maliyet optimizasyonu.
+  - **Trend Filtresi**: EMA200'e göre fiyat çok uzaklaştığında işlemleri durdurma.
+
+- **Yapılandırma**:
+  - Tüm ayarlar `config.json` dosyası üzerinden yönetilecek (API anahtarları, pariteler, bütçe, strateji parametreleri).
+
+- **Çıktı ve Raporlama**:
+  - **Konsol**: Anlık işlem ve durum bilgileri.
+  - **Telegram**: Önemli olaylar için anlık bildirimler (işlemler, hatalar).
+  - **Dosya**: Detaylı işlem logları ve performans raporları (JSON/CSV).
+
+## 3. Teknik Yapı
+- **Dil**: TypeScript (Node.js).
+- **Mimari**: Modüler yapı (BinanceService, StrategyEngine, NotificationService, ReportService vb.).
+- **Veri**: Geçmiş veriler için Binance API/CSV, canlı veri için WebSocket.
+
+## 4. Geliştirme Fazları
+1.  **Faz 1**: Temel altyapı ve Backtest modunun geliştirilmesi.
+2.  **Faz 2**: Papertrade ve Live modlarının entegrasyonu.
+3.  **Faz 3**: Gelişmiş strateji özellikleri (DCA, trend filtresi) ve Telegram bildirimleri.
+4.  **Faz 4**: Kapsamlı testler, optimizasyon ve dokümantasyon.
