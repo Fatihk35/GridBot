@@ -1,0 +1,51 @@
+Task ID [GÖREV_NUMARASI] için GridBot projesinde aşağıdaki gereksinimleri tam olarak karşılayacak şekilde implementasyonu yap:
+
+**Proje Konteksti:**
+- TypeScript + Node.js tabanlı grid trading bot
+- Binance API entegrasyonu
+- /Users/fatihkumrulu/Documents/Projects/GridBot klasöründe çalışıyoruz
+- Mevcut proje yapısını koru ve genişlet
+
+**Teknik Gereksinimler:**
+1. TypeScript strict mode kullan
+2. Zod ile validation implement et
+3. Error handling ve logging ekle
+4. Jest ile unit testler yaz
+5. ESLint/Prettier standartlarına uygun kod yaz
+6. Async/await pattern kullan
+7. Environment variables için dotenv kullan
+
+**Implementasyon Adımları:**
+1. Gerekli klasör yapısını oluştur (src/services, src/models, src/utils vb.)
+2. package.json'a gerekli dependencies ekle
+3. TypeScript interfaces/types tanımla
+4. Ana class/service implementasyonunu yap
+5. Error handling ve validation ekle
+6. Unit testleri yaz
+7. Example usage documentation ekle
+
+**Dosya Organizasyonu:**
+- src/ klasörü altında organize et
+- Her service için ayrı dosya
+- Types/interfaces için ayrı dosya
+- Test dosyalarını __tests__ klasöründe organize et
+- Configuration dosyalarını config/ klasöründe tut
+
+**Kod Kalitesi:**
+- Clean code principles
+- SOLID principles
+- Proper error messages
+- TypeScript strict typing
+- Comprehensive JSDoc comments
+- Performance considerations
+
+**Test Gereksinimleri:**
+- Unit test coverage %80+
+- Edge case testleri
+- Error scenario testleri
+- Mock external dependencies
+- Integration test örnekleri
+
+Task details'deki tüm example code'ları referans al ama daha güncel ve optimize versiyonlarını implement et. Tüm dosyaları oluştur, gerekli npm packages'ları install et ve çalışır durumda teslim et.
+
+TaskMaster sistemindeki task status'unu otomatik olarak 'done' yap ve implementation notlarını task'a ekle.

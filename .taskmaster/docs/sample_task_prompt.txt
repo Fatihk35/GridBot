@@ -1,0 +1,2 @@
+Task ID 1 için GridBot projesinde aşağıdaki gereksinimleri tam olarak karşılayacak şekilde implementasyonu yap:
+[yukarıdaki şablon + task 1 specific details]

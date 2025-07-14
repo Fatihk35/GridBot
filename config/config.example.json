@@ -1,0 +1,41 @@
+{
+  "tradeMode": "backtest",
+  "exchange": "binance",
+  "maxBudget": {
+    "amount": 1000,
+    "currency": "USDT"
+  },
+  "symbols": [
+    {
+      "pair": "BTCUSDT",
+      "minDailyBarDiffThreshold": 0.01
+    },
+    {
+      "pair": "ETHUSDT",
+      "minDailyBarDiffThreshold": 0.015
+    }
+  ],
+  "apiKeys": {
+    "binanceApiKey": "your_binance_api_key_here",
+    "binanceSecretKey": "your_binance_secret_key_here",
+    "telegramBotToken": "optional_telegram_bot_token",
+    "telegramChatId": "optional_telegram_chat_id"
+  },
+  "strategySettings": {
+    "barCountForVolatility": 30,
+    "minVolatilityPercentage": 0.02,
+    "minVolatileBarRatio": 0.6,
+    "emaPeriod": 200,
+    "emaDeviationThreshold": 0.05
+  },
+  "binanceSettings": {
+    "testnet": true,
+    "commissionRate": 0.001
+  },
+  "logging": {
+    "enableConsoleOutput": true,
+    "enableTelegramOutput": false,
+    "reportDirectory": "./reports",
+    "transactionLogFileName": "transactions.log"
+  }
+}
