@@ -27,9 +27,11 @@
   "license": "MIT",
   "dependencies": {
     "@binance/connector": "^3.6.1",
+    "@types/uuid": "^10.0.0",
     "dotenv": "^16.4.5",
     "node-binance-api": "^0.13.1",
     "tslib": "^2.8.1",
+    "uuid": "^11.1.0",
     "winston": "^3.13.0",
     "ws": "^8.18.3",
     "zod": "^3.23.8"
