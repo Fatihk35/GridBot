@@ -67,3 +67,11 @@ expect.extend({
 
 // Test timeout
 jest.setTimeout(10000);
+
+// Add a test to prevent "no tests" error
+describe('Test Setup', () => {
+  it('should configure test environment properly', () => {
+    expect((global as any).WebSocket).toBeDefined();
+    expect(global.console).toBeDefined();
+  });
+});

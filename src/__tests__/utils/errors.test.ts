@@ -16,7 +16,7 @@ describe('Custom Error Classes', () => {
     });
 
     it('should create ConfigError with code and details', () => {
-      const error = new ConfigError('Invalid config', 'CONFIG_001', { field: 'apiKey' });
+      const error = new ConfigError('Invalid config', 'CONFIG_001', { field: 'apiKey' } as any);
       
       expect(error.code).toBe('CONFIG_001');
       expect(error.details).toEqual({ field: 'apiKey' });
@@ -165,7 +165,7 @@ describe('ErrorHandler', () => {
 
   describe('formatError', () => {
     it('should format ConfigError with code and details', () => {
-      const error = new ConfigError('Invalid config', 'CONFIG_001', { field: 'apiKey' });
+      const error = new ConfigError('Invalid config', 'CONFIG_001', { field: 'apiKey' } as any);
       const formatted = ErrorHandler.formatError(error);
       
       expect(formatted).toContain('ConfigError');

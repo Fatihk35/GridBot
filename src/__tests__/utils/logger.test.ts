@@ -209,9 +209,9 @@ describe('Logger', () => {
     it('should handle uncaught exceptions', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       
-      // Simulate uncaught exception
+      // Simulate uncaught exception - cast to avoid TypeScript error
       const error = new Error('Uncaught exception');
-      process.emit('uncaughtException', error, 'uncaughtException');
+      (process as any).emit('uncaughtException', error, 'uncaughtException');
       
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();

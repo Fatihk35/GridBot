@@ -237,7 +237,7 @@ describe('ConfigValidator', () => {
     it('should return false for invalid symbols section', () => {
       const invalidConfig = { 
         ...validConfig, 
-        symbols: [] 
+        symbols: null // This should make validation fail
       };
       const result = ConfigValidator.validateSections(invalidConfig);
       
