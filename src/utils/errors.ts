@@ -24,10 +24,11 @@
 export class ConfigError extends BaseError {
   constructor(
     message: string,
+    code?: string,
     public readonly details?: unknown,
     cause?: Error
   ) {
-    super(message, 'CONFIG_ERROR', cause);
+    super(message, code || 'CONFIG_ERROR', cause);
     this.name = 'ConfigError';
   }
 }

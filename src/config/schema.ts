@@ -15,6 +15,9 @@ const BudgetConfigSchema = z.object({
 const SymbolConfigSchema = z.object({
   pair: z.string().min(1, 'Symbol pair must not be empty'),
   minDailyBarDiffThreshold: z.number().positive('Minimum daily bar diff threshold must be positive'),
+  gridSize: z.number().positive('Grid size must be positive').optional().default(100),
+  pricePrecision: z.number().int().min(1).max(8).optional().default(8),
+  quantityPrecision: z.number().int().min(1).max(8).optional().default(8),
 });
 
 /**
@@ -176,6 +179,9 @@ export class ConfigValidator {
         {
           pair: 'BTCUSDT',
           minDailyBarDiffThreshold: 0.01,
+          gridSize: 100,
+          pricePrecision: 2,
+          quantityPrecision: 6,
         },
       ],
       strategySettings: {

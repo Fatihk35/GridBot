@@ -68,7 +68,10 @@ describe('BinanceService Basic Tests', () => {
       symbols: [
         {
           pair: 'BTCUSDT',
-          minDailyBarDiffThreshold: 100
+          minDailyBarDiffThreshold: 100,
+          gridSize: 1000,
+          pricePrecision: 2,
+          quantityPrecision: 6
         }
       ],
       strategySettings: {

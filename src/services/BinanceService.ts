@@ -748,47 +748,189 @@ export class BinanceService {
       if (binanceError.code === BINANCE_ERROR_CODES.TOO_MANY_REQUESTS) {
         const retryAfter = this.extractRetryAfter(error.response.headers);
         this.rateLimiter.handleRateLimitExceeded(retryAfter);
-        return new BinanceRateLimitError(
-          `Rate limit exceeded: ${binanceError.msg}`,
-          retryAfter,
-          error
-        );
+        return new BinanceRateLimitError(binanceError.msg, retryAfter);
       }
-      
-      return BinanceApiError.fromBinanceError(binanceError, context);
+
+      return BinanceApiError.fromBinanceError(binanceError);
     }
 
-    // Handle network errors
-    if (error.code === 'ETIMEDOUT') {
-      return new BinanceApiError(
-        `Request timeout in ${context}`,
-        BINANCE_ERROR_CODES.TIMEOUT,
-        'Request timeout',
-        error
-      );
-    }
-
-    // Default error handling
+    // Handle network and other errors
     return new BinanceApiError(
-      `Unknown error in ${context}: ${error.message}`,
+      `${context} failed: ${error.message}`,
       BINANCE_ERROR_CODES.UNKNOWN,
-      error.message || 'Unknown error',
+      error.message,
       error
     );
   }
 
   /**
-   * Extract retry-after header from response
+   * Extract retry-after value from response headers
    */
-  private extractRetryAfter(headers: any): number | undefined {
+  private extractRetryAfter(headers: any): number {
     const retryAfter = headers['retry-after'] || headers['Retry-After'];
-    return retryAfter ? parseInt(retryAfter, 10) : undefined;
+    return retryAfter ? parseInt(retryAfter, 10) * 1000 : 60000; // Default to 1 minute
   }
 
   /**
-   * Sleep for specified milliseconds
+   * Sleep utility function
    */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get historical candlestick data
+   */
+  public async getHistoricalData(
+    symbol: string,
+    interval: BinanceInterval,
+    limit: number = 500
+  ): Promise<Array<{
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    timestamp: number;
+  }>> {
+    const klines = await this.getHistoricalKlines({
+      symbol,
+      interval,
+      limit
+    });
+
+    return klines.map((kline: BinanceKline) => ({
+      open: kline.open,
+      high: kline.high,
+      low: kline.low,
+      close: kline.close,
+      volume: kline.volume,
+      timestamp: kline.openTime
+    }));
+  }
+
+  /**
+   * Get latest candlestick data for a symbol
+   */
+  public async getLatestCandle(
+    symbol: string,
+    interval: BinanceInterval
+  ): Promise<{
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    timestamp: number;
+  }> {
+    const klines = await this.getHistoricalKlines({
+      symbol,
+      interval,
+      limit: 1
+    });
+
+    if (klines.length === 0) {
+      throw new BinanceApiError(
+        `No candlestick data available for ${symbol}`,
+        BINANCE_ERROR_CODES.UNKNOWN,
+        `No candlestick data available for ${symbol}`
+      );
+    }
+
+    const kline = klines[0];
+    if (!kline) {
+      throw new BinanceApiError(
+        `No valid candlestick data available for ${symbol}`,
+        BINANCE_ERROR_CODES.UNKNOWN,
+        'No data returned'
+      );
+    }
+    
+    return {
+      open: kline.open,
+      high: kline.high,
+      low: kline.low,
+      close: kline.close,
+      volume: kline.volume,
+      timestamp: kline.openTime
+    };
+  }
+
+  /**
+   * Place a limit order
+   */
+  public async placeLimitOrder(
+    symbol: string,
+    side: BinanceOrderSide,
+    quantity: number,
+    price: number
+  ): Promise<BinanceOrderResponse> {
+    return this.createOrder({
+      symbol,
+      side,
+      type: 'LIMIT',
+      timeInForce: 'GTC',
+      quantity,
+      price
+    });
+  }
+
+  /**
+   * Get open orders for a symbol
+   */
+  public async getOpenOrders(symbol?: string): Promise<BinanceOrderResponse[]> {
+    await this.rateLimiter.waitForRateLimit('general');
+    
+    try {
+      const response = await this.executeWithRetry(async () => {
+        const params: any = {};
+        if (symbol) {
+          params.symbol = symbol;
+        }
+        return await (this.client as any).openOrders(params);
+      });
+
+      this.rateLimiter.recordRequest('general');
+      return response.data;
+    } catch (error) {
+      const binanceError = this.handleBinanceError(error, 'getOpenOrders');
+      throw binanceError;
+    }
+  }
+
+  /**
+   * Cancel all open orders for a symbol
+   */
+  public async cancelAllOrders(symbol: string): Promise<BinanceOrderResponse[]> {
+    try {
+      // First get all open orders for the symbol
+      const openOrders = await this.getOpenOrders(symbol);
+      
+      const cancelledOrders: BinanceOrderResponse[] = [];
+      
+      // Cancel each order individually
+      for (const order of openOrders) {
+        try {
+          const cancelledOrder = await this.cancelOrder({
+            symbol: order.symbol,
+            orderId: order.orderId
+          });
+          cancelledOrders.push(cancelledOrder);
+        } catch (error) {
+          this.logger.warn(`Failed to cancel order ${order.orderId}`, { error });
+        }
+      }
+      
+      this.logger.info('Orders cancelled for symbol', {
+        symbol,
+        totalOrders: openOrders.length,
+        cancelledOrders: cancelledOrders.length
+      });
+
+      return cancelledOrders;
+    } catch (error) {
+      const binanceError = this.handleBinanceError(error, 'cancelAllOrders');
+      throw binanceError;
+    }
   }
 }
