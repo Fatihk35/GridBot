@@ -64,12 +64,15 @@ export interface StrategyState {
   /** Total profit/loss for this symbol */
   totalProfit: number;
   /** Open positions map (grid index -> position details) */
-  openPositions: Map<number, {
-    entryPrice: number;
-    quantity: number;
-    orderId: number;
-    timestamp: number;
-  }>;
+  openPositions: Map<
+    number,
+    {
+      entryPrice: number;
+      quantity: number;
+      orderId: number;
+      timestamp: number;
+    }
+  >;
   /** Grid interval size */
   gridInterval: number;
   /** Base grid size in USDT */
@@ -109,12 +112,14 @@ const StrategyConfigSchema = z.object({
   minVolatileBarRatio: z.number().min(0.1).max(1).default(0.3),
   barCountForVolatility: z.number().min(10).max(100).default(24),
   profitTargetMultiplier: z.number().min(1).max(10).default(4),
-  dcaMultipliers: z.object({
-    standard: z.number().default(1),
-    moderate: z.number().default(3),
-    aggressive: z.number().default(4)
-  }).default({}),
-  gridRecalculationIntervalHours: z.number().min(1).max(168).default(48)
+  dcaMultipliers: z
+    .object({
+      standard: z.number().default(1),
+      moderate: z.number().default(3),
+      aggressive: z.number().default(4),
+    })
+    .default({}),
+  gridRecalculationIntervalHours: z.number().min(1).max(168).default(48),
 });
 
 type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
@@ -132,13 +137,13 @@ export class StrategyEngine {
   constructor(config: BotConfigType, strategyConfig?: Partial<StrategyConfig>) {
     this.config = config;
     this.logger = Logger.getInstance();
-    
+
     // Validate and set strategy configuration
     this.strategyConfig = StrategyConfigSchema.parse(strategyConfig || {});
-    
+
     this.logger.info('StrategyEngine initialized', {
       strategyConfig: this.strategyConfig,
-      symbols: this.config.symbols.map(s => s.pair)
+      symbols: this.config.symbols.map(s => s.pair),
     });
   }
 
@@ -147,16 +152,24 @@ export class StrategyEngine {
    */
   public initializeStrategy(symbol: string, historicalData: CandlestickData[]): void {
     try {
-      this.logger.info(`Initializing strategy for ${symbol}`, { 
-        dataPoints: historicalData.length 
+      this.logger.info(`Initializing strategy for ${symbol}`, {
+        dataPoints: historicalData.length,
       });
 
-      if (historicalData.length < Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1) {
-        throw new Error(`Insufficient historical data for ${symbol}. Need at least ${Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1} periods`);
+      if (
+        historicalData.length <
+        Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1
+      ) {
+        throw new Error(
+          `Insufficient historical data for ${symbol}. Need at least ${Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1} periods`
+        );
       }
 
       // Calculate initial indicators
-      const atr = this.calculateGridInterval(historicalData, this.strategyConfig.gridIntervalMethod);
+      const atr = this.calculateGridInterval(
+        historicalData,
+        this.strategyConfig.gridIntervalMethod
+      );
       const ema200 = calculateEMA(historicalData, this.strategyConfig.emaPeriod);
       const currentPrice = historicalData[historicalData.length - 1]?.close;
 
@@ -181,11 +194,11 @@ export class StrategyEngine {
         totalProfit: 0,
         openPositions: new Map(),
         gridInterval: atr,
-        baseGridSize: symbolConfig.gridSize || 100 // Default 100 USDT per grid
+        baseGridSize: symbolConfig.gridSize || 100, // Default 100 USDT per grid
       };
 
       this.strategyStates.set(symbol, strategyState);
-      
+
       // Initialize metrics
       this.metrics.set(symbol, {
         totalTrades: 0,
@@ -194,7 +207,7 @@ export class StrategyEngine {
         winRate: 0,
         avgProfitPerTrade: 0,
         maxDrawdown: 0,
-        sharpeRatio: 0
+        sharpeRatio: 0,
       });
 
       // Calculate initial grid levels
@@ -205,9 +218,8 @@ export class StrategyEngine {
         ema200,
         atr,
         gridInterval: atr,
-        gridLevelsCount: strategyState.gridLevels.length
+        gridLevelsCount: strategyState.gridLevels.length,
       });
-
     } catch (error) {
       this.logger.error(`Failed to initialize strategy for ${symbol}`, { error });
       throw error;
@@ -218,7 +230,7 @@ export class StrategyEngine {
    * Calculate grid interval based on selected method
    */
   public calculateGridInterval(
-    historicalData: CandlestickData[], 
+    historicalData: CandlestickData[],
     method: 'ATR' | 'DailyBarDiff'
   ): number {
     try {
@@ -228,35 +240,35 @@ export class StrategyEngine {
         // Daily Bar Difference method
         const barCount = this.strategyConfig.barCountForVolatility;
         const bars = historicalData.slice(-barCount);
-        
+
         if (bars.length < barCount) {
           throw new Error('Insufficient data for Daily Bar Difference calculation');
         }
 
         let totalDiff = 0;
         let volatileBarCount = 0;
-        
+
         bars.forEach(bar => {
           const diff = Math.abs(bar.close - bar.open);
           totalDiff += diff;
-          
+
           if (diff / bar.open > this.strategyConfig.minVolatilityPercentage) {
             volatileBarCount++;
           }
         });
-        
+
         const avgBarDiff = totalDiff / barCount;
         const volatileBarRatio = volatileBarCount / barCount;
-        
+
         // Check if volatility criteria is met
         if (volatileBarRatio < this.strategyConfig.minVolatileBarRatio) {
           this.logger.warn('Insufficient volatility detected', {
             volatileBarRatio,
-            required: this.strategyConfig.minVolatileBarRatio
+            required: this.strategyConfig.minVolatileBarRatio,
           });
           return 0; // Not enough volatility
         }
-        
+
         return avgBarDiff / 4; // Grid interval is 1/4 of average bar difference
       }
     } catch (error) {
@@ -278,7 +290,7 @@ export class StrategyEngine {
     try {
       const { currentPrice, atr } = state;
       const symbolConfig = this.config.symbols.find(s => s.pair === symbol);
-      
+
       if (!symbolConfig) {
         this.logger.error(`Symbol configuration not found for ${symbol}`);
         return;
@@ -289,7 +301,7 @@ export class StrategyEngine {
       if (atr < minThreshold) {
         this.logger.info(`Skipping ${symbol} due to insufficient volatility`, {
           atr,
-          minThreshold
+          minThreshold,
         });
         return;
       }
@@ -297,10 +309,10 @@ export class StrategyEngine {
       // Calculate grid levels around current price
       const gridLevels: GridLevel[] = [];
       const gridCount = Math.floor(this.strategyConfig.gridLevelsCount / 2);
-      
+
       for (let i = -gridCount; i <= gridCount; i++) {
-        const price = currentPrice + (i * atr);
-        
+        const price = currentPrice + i * atr;
+
         // Skip grid levels that are too close to current price
         if (Math.abs(price - currentPrice) < atr * 0.1) {
           continue;
@@ -308,21 +320,23 @@ export class StrategyEngine {
 
         // Determine position size with DCA logic
         let buySize = state.baseGridSize;
-        
+
         // Apply DCA logic based on distance from current price
-        if (i <= -Math.floor(gridCount * 0.8)) { // Bottom 20% of grid levels
+        if (i <= -Math.floor(gridCount * 0.8)) {
+          // Bottom 20% of grid levels
           buySize = state.baseGridSize * this.strategyConfig.dcaMultipliers.aggressive;
-        } else if (i <= -Math.floor(gridCount * 0.5)) { // Next 30% of grid levels
+        } else if (i <= -Math.floor(gridCount * 0.5)) {
+          // Next 30% of grid levels
           buySize = state.baseGridSize * this.strategyConfig.dcaMultipliers.moderate;
         }
-        
+
         const gridLevel: GridLevel = {
           price: Number(price.toFixed(symbolConfig.pricePrecision || 8)),
           buySize,
           sellSize: 0, // Will be set when buy orders are filled
           status: 'pending',
           index: i + gridCount, // Convert to positive index
-          profitTarget: this.calculateProfitTarget(price, atr)
+          profitTarget: this.calculateProfitTarget(price, atr),
         };
 
         gridLevels.push(gridLevel);
@@ -335,9 +349,8 @@ export class StrategyEngine {
       this.logger.info(`Grid levels recalculated for ${symbol}`, {
         gridLevelsCount: gridLevels.length,
         currentPrice,
-        gridInterval: atr
+        gridInterval: atr,
       });
-
     } catch (error) {
       this.logger.error(`Failed to recalculate grid levels for ${symbol}`, { error });
     }
@@ -352,15 +365,15 @@ export class StrategyEngine {
 
     const { currentPrice, ema200 } = state;
     const deviation = Math.abs(currentPrice - ema200) / ema200;
-    
+
     const shouldTrade = deviation <= this.strategyConfig.emaDeviationThreshold;
-    
+
     if (!shouldTrade) {
       this.logger.debug(`Trading filtered out by EMA for ${symbol}`, {
         currentPrice,
         ema200,
         deviation,
-        threshold: this.strategyConfig.emaDeviationThreshold
+        threshold: this.strategyConfig.emaDeviationThreshold,
       });
     }
 
@@ -370,7 +383,11 @@ export class StrategyEngine {
   /**
    * Update strategy state with new market data
    */
-  public updateState(symbol: string, latestCandle: CandlestickData, historicalData: CandlestickData[]): void {
+  public updateState(
+    symbol: string,
+    latestCandle: CandlestickData,
+    historicalData: CandlestickData[]
+  ): void {
     const state = this.strategyStates.get(symbol);
     if (!state) {
       this.logger.warn(`Strategy state not found for ${symbol}`);
@@ -380,13 +397,17 @@ export class StrategyEngine {
     try {
       // Update current price
       state.currentPrice = latestCandle.close;
-      
+
       // Update indicators
       state.ema200 = calculateEMA(historicalData, this.strategyConfig.emaPeriod);
-      state.atr = this.calculateGridInterval(historicalData, this.strategyConfig.gridIntervalMethod);
+      state.atr = this.calculateGridInterval(
+        historicalData,
+        this.strategyConfig.gridIntervalMethod
+      );
 
       // Check if we need to recalculate grid levels
-      const recalculationIntervalMs = this.strategyConfig.gridRecalculationIntervalHours * 60 * 60 * 1000;
+      const recalculationIntervalMs =
+        this.strategyConfig.gridRecalculationIntervalHours * 60 * 60 * 1000;
       if (Date.now() - state.lastGridRecalculationTime > recalculationIntervalMs) {
         this.logger.info(`Recalculating grid levels for ${symbol} due to time interval`);
         this.recalculateGridLevels(symbol);
@@ -395,9 +416,8 @@ export class StrategyEngine {
       this.logger.debug(`State updated for ${symbol}`, {
         currentPrice: state.currentPrice,
         ema200: state.ema200,
-        atr: state.atr
+        atr: state.atr,
       });
-
     } catch (error) {
       this.logger.error(`Failed to update state for ${symbol}`, { error });
     }
@@ -427,7 +447,7 @@ export class StrategyEngine {
         // Buy signal: current price is above grid level (price dipped to our buy level)
         if (state.currentPrice <= level.price && level.price < state.currentPrice * 1.001) {
           const confidence = this.calculateSignalConfidence(symbol, 'buy', level);
-          
+
           buySignals.push({
             type: 'buy',
             symbol,
@@ -435,14 +455,14 @@ export class StrategyEngine {
             quantity: level.buySize / level.price, // Convert USDT to base currency
             gridLevel: level,
             confidence,
-            timestamp: currentTime
+            timestamp: currentTime,
           });
         }
-        
+
         // Sell signal: we have a position and current price is above profit target
         if (level.sellSize > 0 && level.profitTarget && state.currentPrice >= level.profitTarget) {
           const confidence = this.calculateSignalConfidence(symbol, 'sell', level);
-          
+
           sellSignals.push({
             type: 'sell',
             symbol,
@@ -450,7 +470,7 @@ export class StrategyEngine {
             quantity: level.sellSize,
             gridLevel: level,
             confidence,
-            timestamp: currentTime
+            timestamp: currentTime,
           });
         }
       }
@@ -458,7 +478,7 @@ export class StrategyEngine {
 
     this.logger.debug(`Generated trade signals for ${symbol}`, {
       buySignals: buySignals.length,
-      sellSignals: sellSignals.length
+      sellSignals: sellSignals.length,
     });
 
     return { buy: buySignals, sell: sellSignals };
@@ -467,7 +487,11 @@ export class StrategyEngine {
   /**
    * Calculate signal confidence based on market conditions
    */
-  private calculateSignalConfidence(symbol: string, signalType: 'buy' | 'sell', gridLevel: GridLevel): number {
+  private calculateSignalConfidence(
+    symbol: string,
+    signalType: 'buy' | 'sell',
+    gridLevel: GridLevel
+  ): number {
     const state = this.strategyStates.get(symbol);
     if (!state) return 0.5;
 
@@ -478,7 +502,8 @@ export class StrategyEngine {
     confidence += (this.strategyConfig.emaDeviationThreshold - emaDeviation) * 0.5;
 
     // Adjust confidence based on volatility
-    if (state.atr > state.currentPrice * 0.02) { // High volatility
+    if (state.atr > state.currentPrice * 0.02) {
+      // High volatility
       confidence += 0.1;
     }
 
@@ -496,17 +521,17 @@ export class StrategyEngine {
   public calculateProfitTarget(entryPrice: number, gridInterval: number): number {
     // Target profit is configured multiplier times the grid interval
     // This accounts for commissions and provides net profit
-    return entryPrice + (this.strategyConfig.profitTargetMultiplier * gridInterval);
+    return entryPrice + this.strategyConfig.profitTargetMultiplier * gridInterval;
   }
 
   /**
    * Mark a grid level as filled and update position tracking
    */
   public markGridLevelFilled(
-    symbol: string, 
-    gridIndex: number, 
-    fillPrice: number, 
-    fillQuantity: number, 
+    symbol: string,
+    gridIndex: number,
+    fillPrice: number,
+    fillQuantity: number,
     orderId: number
   ): void {
     const state = this.strategyStates.get(symbol);
@@ -528,14 +553,14 @@ export class StrategyEngine {
       entryPrice: fillPrice,
       quantity: fillQuantity,
       orderId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     this.logger.info(`Grid level filled for ${symbol}`, {
       gridIndex,
       fillPrice,
       fillQuantity,
-      orderId
+      orderId,
     });
   }
 
@@ -543,14 +568,14 @@ export class StrategyEngine {
    * Process a completed trade and update metrics
    */
   public processCompletedTrade(
-    symbol: string, 
-    gridIndex: number, 
-    sellPrice: number, 
+    symbol: string,
+    gridIndex: number,
+    sellPrice: number,
     sellQuantity: number
   ): void {
     const state = this.strategyStates.get(symbol);
     const metrics = this.metrics.get(symbol);
-    
+
     if (!state || !metrics) return;
 
     const position = state.openPositions.get(gridIndex);
@@ -561,18 +586,18 @@ export class StrategyEngine {
 
     // Calculate profit/loss
     const profit = (sellPrice - position.entryPrice) * sellQuantity;
-    
+
     // Update metrics
     metrics.totalTrades++;
     metrics.totalProfit += profit;
-    
+
     if (profit > 0) {
       metrics.winningTrades++;
     }
-    
+
     metrics.winRate = (metrics.winningTrades / metrics.totalTrades) * 100;
     metrics.avgProfitPerTrade = metrics.totalProfit / metrics.totalTrades;
-    
+
     // Update strategy state
     state.totalProfit += profit;
     state.openPositions.delete(gridIndex);
@@ -591,7 +616,7 @@ export class StrategyEngine {
       profit,
       sellPrice,
       sellQuantity,
-      totalProfit: state.totalProfit
+      totalProfit: state.totalProfit,
     });
   }
 

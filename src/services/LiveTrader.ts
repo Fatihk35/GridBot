@@ -57,7 +57,7 @@ export class LiveTrader {
   private notificationService: NotificationService;
   private reportService: ReportService;
   private logger: Logger;
-  
+
   private isRunning = false;
   private isPaused = false;
   private marketDataSubscriptions: Map<string, boolean> = new Map();
@@ -71,9 +71,9 @@ export class LiveTrader {
     failedTrades: 0,
     totalProfit: 0,
     totalCommissions: 0,
-    activeOrders: 0
+    activeOrders: 0,
   };
-  
+
   // Safety and risk management
   private maxOrdersPerSymbol: number = 50;
   private minBalanceThreshold: number = 0.1; // 10% of configured budget
@@ -94,7 +94,7 @@ export class LiveTrader {
     this.notificationService = notificationService;
     this.reportService = reportService;
     this.logger = Logger.getInstance();
-    
+
     this.initializeStats();
   }
 
@@ -109,7 +109,7 @@ export class LiveTrader {
       failedTrades: 0,
       totalProfit: 0,
       totalCommissions: 0,
-      activeOrders: 0
+      activeOrders: 0,
     };
   }
 
@@ -124,37 +124,38 @@ export class LiveTrader {
     try {
       // Safety confirmation
       await this.confirmLiveTrading();
-      
+
       this.isRunning = true;
       this.startTime = Date.now();
       this.stats.startTime = this.startTime;
       this.dailyLossStartTime = this.startTime;
-      
+
       this.logger.info('Starting live trading mode...');
       await this.notificationService.sendNotification('⚠️ LIVE trading started ⚠️');
-      
+
       // Pre-flight checks
       await this.performPreFlightChecks();
-      
+
       // Initialize daily balance tracking
       const balances = await this.getAccountBalances();
       this.dailyStartBalance = this.calculateTotalBalance(balances);
-      
+
       // Initialize trading for each symbol
       await this.initializeSymbols();
-      
+
       // Start monitoring and reporting
       this.startOrderMonitoring();
       this.startPeriodicReporting();
       this.startRiskMonitoring();
-      
+
       this.logger.info('Live trading started successfully');
-      
     } catch (error) {
       this.isRunning = false;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('Failed to start live trading:', error);
-      await this.notificationService.sendNotification(`Failed to start live trading: ${errorMessage}`);
+      await this.notificationService.sendNotification(
+        `Failed to start live trading: ${errorMessage}`
+      );
       throw error;
     }
   }
@@ -170,27 +171,28 @@ export class LiveTrader {
     try {
       this.isRunning = false;
       this.logger.info('Stopping live trading mode...');
-      
+
       // Cancel all open orders (with user confirmation)
       await this.safelyCancelAllOrders();
-      
+
       // Unsubscribe from market data
       this.unsubscribeFromAllMarketData();
-      
+
       // Generate final report
       await this.generateFinalReport();
-      
+
       // Clear state
       this.activeOrders.clear();
       this.marketDataSubscriptions.clear();
-      
+
       await this.notificationService.sendNotification('LIVE trading stopped');
       this.logger.info('Live trading stopped successfully');
-      
     } catch (error) {
       this.logger.error('Error stopping live trading:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await this.notificationService.sendNotification(`Error stopping live trading: ${errorMessage}`);
+      await this.notificationService.sendNotification(
+        `Error stopping live trading: ${errorMessage}`
+      );
       throw error;
     }
   }
@@ -205,7 +207,9 @@ export class LiveTrader {
 
     this.isPaused = true;
     this.logger.info('Live trading paused');
-    await this.notificationService.sendNotification('Live trading paused - no new orders will be created');
+    await this.notificationService.sendNotification(
+      'Live trading paused - no new orders will be created'
+    );
   }
 
   /**
@@ -234,7 +238,7 @@ export class LiveTrader {
       isRunning: this.isRunning,
       isPaused: this.isPaused,
       stats: { ...this.stats, activeOrders: this.activeOrders.size },
-      activeOrdersCount: this.activeOrders.size
+      activeOrdersCount: this.activeOrders.size,
     };
   }
 
@@ -245,7 +249,7 @@ export class LiveTrader {
     this.logger.warn('WARNING: You are about to start LIVE trading with real funds.');
     this.logger.warn('This will execute real trades on Binance with your actual balance.');
     this.logger.warn('Press Ctrl+C within 10 seconds to cancel...');
-    
+
     // In a real implementation, you might want to require manual confirmation
     // For now, we'll just wait 10 seconds
     await new Promise(resolve => setTimeout(resolve, 10000));
@@ -256,28 +260,32 @@ export class LiveTrader {
    */
   private async performPreFlightChecks(): Promise<void> {
     this.logger.info('Performing pre-flight checks...');
-    
+
     // Check API connectivity
     try {
       // Test connection by getting server time
       await this.binanceService.getExchangeInfo();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new TradingError('Failed to connect to Binance API', undefined, error instanceof Error ? error : undefined);
+      throw new TradingError(
+        'Failed to connect to Binance API',
+        undefined,
+        error instanceof Error ? error : undefined
+      );
     }
-    
+
     // Check account status
     const accountInfo = await this.binanceService.getAccountInfo();
     if (!accountInfo.canTrade) {
       throw new TradingError('Account is not enabled for trading');
     }
-    
+
     // Check balances
     await this.checkAccountBalances();
-    
+
     // Verify exchange info for all symbols
     await this.verifySymbolsInfo();
-    
+
     this.logger.info('Pre-flight checks completed successfully');
   }
 
@@ -287,29 +295,30 @@ export class LiveTrader {
   private async checkAccountBalances(): Promise<void> {
     try {
       const balances = await this.getAccountBalances();
-      
+
       this.logger.info('Account balances:');
       Object.entries(balances).forEach(([currency, balance]) => {
         if (balance.total > 0) {
-          this.logger.info(`${currency}: ${balance.available} (available) + ${balance.onOrder} (in orders) = ${balance.total} (total)`);
+          this.logger.info(
+            `${currency}: ${balance.available} (available) + ${balance.onOrder} (in orders) = ${balance.total} (total)`
+          );
         }
       });
-      
+
       // Check if we have enough balance for trading
       const budgetCurrency = this.config.maxBudget.currency;
       const availableBalance = balances[budgetCurrency]?.available || 0;
       const requiredBalance = this.config.maxBudget.amount * this.minBalanceThreshold;
-      
+
       if (availableBalance < requiredBalance) {
         const message = `Insufficient ${budgetCurrency} balance. Available: ${availableBalance}, Required minimum: ${requiredBalance}`;
         this.logger.error(message);
         throw new InsufficientBalanceError(message);
       }
-      
+
       await this.notificationService.sendNotification(
         `Account Balance Check:\n${budgetCurrency}: ${availableBalance.toFixed(8)} available`
       );
-      
     } catch (error) {
       this.logger.error('Error checking account balances:', error);
       throw error;
@@ -322,18 +331,18 @@ export class LiveTrader {
   private async getAccountBalances(): Promise<AccountBalance> {
     const accountInfo = await this.binanceService.getAccountInfo();
     const balances: AccountBalance = {};
-    
-    accountInfo.balances.forEach((balance) => {
+
+    accountInfo.balances.forEach(balance => {
       const available = parseFloat(balance.free) || 0;
       const onOrder = parseFloat(balance.locked) || 0;
-      
+
       balances[balance.asset] = {
         available,
         onOrder,
-        total: available + onOrder
+        total: available + onOrder,
       };
     });
-    
+
     return balances;
   }
 
@@ -351,22 +360,23 @@ export class LiveTrader {
   private async verifySymbolsInfo(): Promise<void> {
     try {
       const exchangeInfo = await this.binanceService.getExchangeInfo();
-      
+
       for (const symbolConfig of this.config.symbols) {
         const symbol = symbolConfig.pair.replace('/', '');
         const symbolInfo = exchangeInfo.symbols.find((s: any) => s.symbol === symbol);
-        
+
         if (!symbolInfo) {
           throw new TradingError(`Symbol ${symbol} not found on exchange`);
         }
-        
+
         if (symbolInfo.status !== 'TRADING') {
-          throw new TradingError(`Symbol ${symbol} is not available for trading (status: ${symbolInfo.status})`);
+          throw new TradingError(
+            `Symbol ${symbol} is not available for trading (status: ${symbolInfo.status})`
+          );
         }
       }
-      
+
       this.logger.info('All symbols verified successfully');
-      
     } catch (error) {
       this.logger.error('Error verifying symbols:', error);
       throw error;
@@ -379,22 +389,22 @@ export class LiveTrader {
   private async initializeSymbols(): Promise<void> {
     for (const symbolConfig of this.config.symbols) {
       const symbol = symbolConfig.pair;
-      
+
       try {
         this.logger.info(`Initializing strategy for ${symbol}...`);
-        
+
         const binanceSymbol = symbol.replace('/', '');
-        
+
         // Fetch historical data for initial calculations
         const endTime = Date.now();
-        const startTime = endTime - (500 * 60 * 1000); // 500 minutes of 1m candles
+        const startTime = endTime - 500 * 60 * 1000; // 500 minutes of 1m candles
         const historicalData = await this.binanceService.getHistoricalKlines({
           symbol: binanceSymbol,
           interval: '1m',
           startTime,
-          endTime
+          endTime,
         });
-        
+
         // Convert to required format
         const candlestickData = historicalData.map(kline => ({
           timestamp: kline.openTime,
@@ -402,17 +412,16 @@ export class LiveTrader {
           high: kline.high,
           low: kline.low,
           close: kline.close,
-          volume: kline.volume
+          volume: kline.volume,
         }));
-        
+
         // Initialize strategy
         this.strategyEngine.initializeStrategy(symbol, candlestickData);
-        
+
         // Subscribe to real-time market data
         this.subscribeToMarketData(symbol);
-        
+
         this.logger.info(`Strategy initialized for ${symbol}`);
-        
       } catch (error) {
         this.logger.error(`Failed to initialize strategy for ${symbol}:`, error);
         throw error;
@@ -425,18 +434,19 @@ export class LiveTrader {
    */
   private subscribeToMarketData(symbol: string): void {
     this.logger.info(`Subscribing to real-time data for ${symbol}...`);
-    
+
     const binanceSymbol = symbol.replace('/', '');
-    
-    this.binanceService.subscribeToKlineUpdates(binanceSymbol, '1m', (kline) => {
+
+    this.binanceService.subscribeToKlineUpdates(binanceSymbol, '1m', kline => {
       if (!this.isRunning) return;
-      
+
       // Process only completed candles
-      if (kline.k.x) { // x indicates if the kline is closed
+      if (kline.k.x) {
+        // x indicates if the kline is closed
         this.processKline(symbol, kline.k);
       }
     });
-    
+
     this.marketDataSubscriptions.set(symbol, true);
   }
 
@@ -452,44 +462,43 @@ export class LiveTrader {
         high: parseFloat(kline.h),
         low: parseFloat(kline.l),
         close: parseFloat(kline.c),
-        volume: parseFloat(kline.v)
+        volume: parseFloat(kline.v),
       };
-      
+
       // Update strategy state (we need to pass historical data as well)
       // For now, we'll just pass an empty array as the third parameter
       // In a production system, you'd maintain a rolling window of historical data
       this.strategyEngine.updateState(symbol, candlestick, []);
-      
+
       // Skip if trading is paused
       if (this.isPaused) {
         return;
       }
-      
+
       // Get new trade signals
       const signals = this.strategyEngine.getTradeSignals(symbol);
-      
+
       // Execute buy signals
       for (const buySignal of signals.buy) {
         const liveSignal: TradingSignal = {
           price: buySignal.price,
           quantity: buySignal.quantity,
           type: 'BUY',
-          timestamp: buySignal.timestamp
+          timestamp: buySignal.timestamp,
         };
         await this.executeBuyOrder(symbol, liveSignal);
       }
-      
+
       // Execute sell signals
       for (const sellSignal of signals.sell) {
         const liveSignal: TradingSignal = {
           price: sellSignal.price,
           quantity: sellSignal.quantity,
           type: 'SELL',
-          timestamp: sellSignal.timestamp
+          timestamp: sellSignal.timestamp,
         };
         await this.executeSellOrder(symbol, liveSignal);
       }
-      
     } catch (error) {
       this.logger.error(`Error processing kline for ${symbol}:`, error);
     }
@@ -504,25 +513,27 @@ export class LiveTrader {
       if (!this.canCreateNewOrder(symbol)) {
         return;
       }
-      
+
       // Check if we already have an active order at this price level
       const existingOrder = this.findExistingOrderAtPrice(symbol, 'BUY', signal.price);
       if (existingOrder) {
         this.logger.debug(`Already have a BUY order at price level ${signal.price} for ${symbol}`);
         return;
       }
-      
+
       // Check balance
       const balances = await this.getAccountBalances();
       const quoteCurrency = this.getQuoteCurrency(symbol);
       const availableBalance = balances[quoteCurrency]?.available || 0;
       const requiredBalance = signal.quantity * signal.price * 1.01; // Add 1% buffer for fees
-      
+
       if (availableBalance < requiredBalance) {
-        this.logger.warn(`Insufficient ${quoteCurrency} balance for BUY order. Required: ${requiredBalance}, Available: ${availableBalance}`);
+        this.logger.warn(
+          `Insufficient ${quoteCurrency} balance for BUY order. Required: ${requiredBalance}, Available: ${availableBalance}`
+        );
         return;
       }
-      
+
       // Create order on Binance
       const binanceSymbol = symbol.replace('/', '');
       const order = await this.binanceService.createOrder({
@@ -531,9 +542,9 @@ export class LiveTrader {
         type: 'LIMIT',
         quantity: signal.quantity,
         price: signal.price,
-        timeInForce: 'GTC'
+        timeInForce: 'GTC',
       });
-      
+
       // Create internal order tracking
       const internalOrder: LiveOrder = {
         id: this.generateOrderId(),
@@ -547,16 +558,18 @@ export class LiveTrader {
         createTime: Date.now(),
         updateTime: Date.now(),
         gridLevel: signal.price,
-        binanceOrderId: order.orderId.toString()
+        binanceOrderId: order.orderId.toString(),
       };
-      
+
       // Store order
       this.activeOrders.set(internalOrder.id, internalOrder);
       this.stats.totalTrades++;
-      
+
       // Log and notify
-      this.logger.info(`Created BUY order: ${signal.quantity} ${symbol} @ ${signal.price} (Order ID: ${order.orderId})`);
-      
+      this.logger.info(
+        `Created BUY order: ${signal.quantity} ${symbol} @ ${signal.price} (Order ID: ${order.orderId})`
+      );
+
       await this.reportService.logTransaction({
         time: Date.now(),
         type: 'ORDER_CREATED',
@@ -564,17 +577,16 @@ export class LiveTrader {
         side: 'BUY',
         price: signal.price,
         quantity: signal.quantity,
-        orderId: order.orderId.toString()
+        orderId: order.orderId.toString(),
       });
-      
+
       await this.notificationService.sendNotification(
         `🟢 LIVE Trade: Created BUY order\n${signal.quantity} ${symbol} @ ${signal.price}\nOrder ID: ${order.orderId}`
       );
-      
     } catch (error) {
       this.stats.failedTrades++;
       this.logger.error(`Error executing BUY order for ${symbol}:`, error);
-      
+
       if (error instanceof OrderError) {
         await this.notificationService.sendNotification(
           `❌ BUY order failed for ${symbol}: ${error.message}`
@@ -592,24 +604,26 @@ export class LiveTrader {
       if (!this.canCreateNewOrder(symbol)) {
         return;
       }
-      
+
       // Check if we already have an active order at this price level
       const existingOrder = this.findExistingOrderAtPrice(symbol, 'SELL', signal.price);
       if (existingOrder) {
         this.logger.debug(`Already have a SELL order at price level ${signal.price} for ${symbol}`);
         return;
       }
-      
+
       // Check balance
       const balances = await this.getAccountBalances();
       const baseCurrency = this.getBaseCurrency(symbol);
       const availableBalance = balances[baseCurrency]?.available || 0;
-      
+
       if (availableBalance < signal.quantity) {
-        this.logger.warn(`Insufficient ${baseCurrency} balance for SELL order. Required: ${signal.quantity}, Available: ${availableBalance}`);
+        this.logger.warn(
+          `Insufficient ${baseCurrency} balance for SELL order. Required: ${signal.quantity}, Available: ${availableBalance}`
+        );
         return;
       }
-      
+
       // Create order on Binance
       const binanceSymbol = symbol.replace('/', '');
       const order = await this.binanceService.createOrder({
@@ -618,9 +632,9 @@ export class LiveTrader {
         type: 'LIMIT',
         quantity: signal.quantity,
         price: signal.price,
-        timeInForce: 'GTC'
+        timeInForce: 'GTC',
       });
-      
+
       // Create internal order tracking
       const internalOrder: LiveOrder = {
         id: this.generateOrderId(),
@@ -634,16 +648,18 @@ export class LiveTrader {
         createTime: Date.now(),
         updateTime: Date.now(),
         gridLevel: signal.price,
-        binanceOrderId: order.orderId.toString()
+        binanceOrderId: order.orderId.toString(),
       };
-      
+
       // Store order
       this.activeOrders.set(internalOrder.id, internalOrder);
       this.stats.totalTrades++;
-      
+
       // Log and notify
-      this.logger.info(`Created SELL order: ${signal.quantity} ${symbol} @ ${signal.price} (Order ID: ${order.orderId})`);
-      
+      this.logger.info(
+        `Created SELL order: ${signal.quantity} ${symbol} @ ${signal.price} (Order ID: ${order.orderId})`
+      );
+
       await this.reportService.logTransaction({
         time: Date.now(),
         type: 'ORDER_CREATED',
@@ -651,17 +667,16 @@ export class LiveTrader {
         side: 'SELL',
         price: signal.price,
         quantity: signal.quantity,
-        orderId: order.orderId.toString()
+        orderId: order.orderId.toString(),
       });
-      
+
       await this.notificationService.sendNotification(
         `🔴 LIVE Trade: Created SELL order\n${signal.quantity} ${symbol} @ ${signal.price}\nOrder ID: ${order.orderId}`
       );
-      
     } catch (error) {
       this.stats.failedTrades++;
       this.logger.error(`Error executing SELL order for ${symbol}:`, error);
-      
+
       if (error instanceof OrderError) {
         await this.notificationService.sendNotification(
           `❌ SELL order failed for ${symbol}: ${error.message}`
@@ -675,20 +690,23 @@ export class LiveTrader {
    */
   private canCreateNewOrder(symbol: string): boolean {
     // Check maximum orders per symbol
-    const symbolOrders = Array.from(this.activeOrders.values())
-      .filter(order => order.symbol === symbol);
-    
+    const symbolOrders = Array.from(this.activeOrders.values()).filter(
+      order => order.symbol === symbol
+    );
+
     if (symbolOrders.length >= this.maxOrdersPerSymbol) {
-      this.logger.warn(`Maximum orders limit reached for ${symbol} (${symbolOrders.length}/${this.maxOrdersPerSymbol})`);
+      this.logger.warn(
+        `Maximum orders limit reached for ${symbol} (${symbolOrders.length}/${this.maxOrdersPerSymbol})`
+      );
       return false;
     }
-    
+
     // Check daily loss limit
     if (this.isDailyLossLimitExceeded()) {
       this.logger.warn('Daily loss limit exceeded, no new orders will be created');
       return false;
     }
-    
+
     return true;
   }
 
@@ -700,14 +718,14 @@ export class LiveTrader {
     // you would track actual P&L
     const currentTime = Date.now();
     const oneDayMs = 24 * 60 * 60 * 1000;
-    
+
     // Reset daily tracking if a new day has started
     if (currentTime - this.dailyLossStartTime > oneDayMs) {
       this.dailyLossStartTime = currentTime;
       // You would also reset daily P&L tracking here
       return false;
     }
-    
+
     // In a real implementation, compare current balance with daily start balance
     // and check if loss exceeds maxDailyLoss percentage
     return false;
@@ -716,12 +734,17 @@ export class LiveTrader {
   /**
    * Find existing order at specific price level
    */
-  private findExistingOrderAtPrice(symbol: string, side: 'BUY' | 'SELL', price: number): LiveOrder | undefined {
-    return Array.from(this.activeOrders.values()).find(order =>
-      order.symbol === symbol &&
-      order.side === side &&
-      order.status === 'NEW' &&
-      Math.abs(order.price - price) < 0.000001 // Use small epsilon for float comparison
+  private findExistingOrderAtPrice(
+    symbol: string,
+    side: 'BUY' | 'SELL',
+    price: number
+  ): LiveOrder | undefined {
+    return Array.from(this.activeOrders.values()).find(
+      order =>
+        order.symbol === symbol &&
+        order.side === side &&
+        order.status === 'NEW' &&
+        Math.abs(order.price - price) < 0.000001 // Use small epsilon for float comparison
     );
   }
 
@@ -760,7 +783,7 @@ export class LiveTrader {
   private startOrderMonitoring(): void {
     setInterval(async () => {
       if (!this.isRunning) return;
-      
+
       try {
         await this.checkOrderStatuses();
       } catch (error) {
@@ -773,23 +796,22 @@ export class LiveTrader {
    * Check status of all active orders
    */
   private async checkOrderStatuses(): Promise<void> {
-    const orderChecks = Array.from(this.activeOrders.values()).map(async (order) => {
+    const orderChecks = Array.from(this.activeOrders.values()).map(async order => {
       try {
         if (!order.binanceOrderId) return;
-        
+
         const binanceSymbol = order.symbol.replace('/', '');
-        const orderStatus = await this.binanceService.queryOrder({ 
-          symbol: binanceSymbol, 
-          orderId: parseInt(order.binanceOrderId) 
+        const orderStatus = await this.binanceService.queryOrder({
+          symbol: binanceSymbol,
+          orderId: parseInt(order.binanceOrderId),
         });
-        
+
         await this.updateOrderStatus(order, orderStatus);
-        
       } catch (error) {
         this.logger.error(`Error checking order ${order.id} status:`, error);
       }
     });
-    
+
     await Promise.allSettled(orderChecks);
   }
 
@@ -800,40 +822,44 @@ export class LiveTrader {
     const oldStatus = order.status;
     const newStatus = binanceOrder.status;
     const filledQuantity = parseFloat(binanceOrder.executedQty);
-    
+
     if (oldStatus === newStatus && order.filledQuantity === filledQuantity) {
       return; // No change
     }
-    
+
     // Update order
     order.status = newStatus;
     order.filledQuantity = filledQuantity;
     order.updateTime = Date.now();
-    
+
     // Log status change
-    this.logger.info(`Order ${order.id} status changed: ${oldStatus} -> ${newStatus}, Filled: ${filledQuantity}/${order.quantity}`);
-    
+    this.logger.info(
+      `Order ${order.id} status changed: ${oldStatus} -> ${newStatus}, Filled: ${filledQuantity}/${order.quantity}`
+    );
+
     await this.reportService.logTransaction({
       time: Date.now(),
       type: 'ORDER_FILLED',
       symbol: order.symbol,
       orderId: order.binanceOrderId!,
-      metadata: { status: newStatus, filledQuantity }
+      metadata: { status: newStatus, filledQuantity },
     });
-    
+
     // Handle filled orders
     if (newStatus === 'FILLED') {
       this.stats.successfulTrades++;
-      
+
       // Calculate commission and profit
       const commission = filledQuantity * order.price * this.config.binanceSettings.commissionRate;
       this.stats.totalCommissions += commission;
-      
+
       // Remove from active orders
       this.activeOrders.delete(order.id);
-      
-      this.logger.info(`Order ${order.id} filled: ${filledQuantity} ${order.symbol} @ ${order.price}`);
-      
+
+      this.logger.info(
+        `Order ${order.id} filled: ${filledQuantity} ${order.symbol} @ ${order.price}`
+      );
+
       await this.reportService.logTransaction({
         time: Date.now(),
         type: 'ORDER_FILLED',
@@ -842,18 +868,18 @@ export class LiveTrader {
         side: order.side,
         price: order.price,
         quantity: filledQuantity,
-        metadata: { commission }
+        metadata: { commission },
       });
-      
+
       await this.notificationService.sendNotification(
         `✅ Order Filled: ${order.side} ${filledQuantity} ${order.symbol} @ ${order.price}\nCommission: ${commission.toFixed(8)}`
       );
     }
-    
+
     // Handle canceled orders
     if (newStatus === 'CANCELED') {
       this.activeOrders.delete(order.id);
-      
+
       await this.notificationService.sendNotification(
         `❌ Order Canceled: ${order.side} ${order.quantity} ${order.symbol} @ ${order.price}`
       );
@@ -865,30 +891,36 @@ export class LiveTrader {
    */
   private startPeriodicReporting(): void {
     // Report status every hour
-    setInterval(async () => {
-      if (!this.isRunning) return;
-      
-      try {
-        await this.generateStatusReport();
-      } catch (error) {
-        this.logger.error('Error generating status report:', error);
-      }
-    }, 60 * 60 * 1000); // 1 hour
+    setInterval(
+      async () => {
+        if (!this.isRunning) return;
+
+        try {
+          await this.generateStatusReport();
+        } catch (error) {
+          this.logger.error('Error generating status report:', error);
+        }
+      },
+      60 * 60 * 1000
+    ); // 1 hour
   }
 
   /**
    * Start risk monitoring
    */
   private startRiskMonitoring(): void {
-    setInterval(async () => {
-      if (!this.isRunning) return;
-      
-      try {
-        await this.performRiskChecks();
-      } catch (error) {
-        this.logger.error('Error during risk monitoring:', error);
-      }
-    }, 5 * 60 * 1000); // Every 5 minutes
+    setInterval(
+      async () => {
+        if (!this.isRunning) return;
+
+        try {
+          await this.performRiskChecks();
+        } catch (error) {
+          this.logger.error('Error during risk monitoring:', error);
+        }
+      },
+      5 * 60 * 1000
+    ); // Every 5 minutes
   }
 
   /**
@@ -900,15 +932,16 @@ export class LiveTrader {
     const budgetCurrency = this.config.maxBudget.currency;
     const currentBalance = balances[budgetCurrency]?.available || 0;
     const requiredBalance = this.config.maxBudget.amount * this.minBalanceThreshold;
-    
+
     if (currentBalance < requiredBalance) {
       await this.notificationService.sendNotification(
         `⚠️ Low Balance Warning: ${budgetCurrency} balance (${currentBalance}) is below minimum threshold (${requiredBalance})`
       );
     }
-    
+
     // Check for too many failed trades
-    const failureRate = this.stats.totalTrades > 0 ? this.stats.failedTrades / this.stats.totalTrades : 0;
+    const failureRate =
+      this.stats.totalTrades > 0 ? this.stats.failedTrades / this.stats.totalTrades : 0;
     if (failureRate > 0.5 && this.stats.totalTrades > 10) {
       await this.notificationService.sendNotification(
         `⚠️ High Failure Rate: ${(failureRate * 100).toFixed(1)}% of trades are failing`
@@ -923,41 +956,44 @@ export class LiveTrader {
     try {
       const balances = await this.getAccountBalances();
       const openOrders = await this.binanceService.getOpenOrders();
-      
+
       const runtime = Date.now() - this.startTime;
       const runtimeHours = (runtime / (60 * 60 * 1000)).toFixed(2);
-      
+
       const report = {
         time: Date.now(),
         mode: 'live' as const,
         balances: Object.entries(balances)
           .filter(([_, balance]) => balance.total > 0)
-          .reduce((acc, [currency, balance]) => {
-            acc[currency] = balance.total;
-            return acc;
-          }, {} as Record<string, number>)
+          .reduce(
+            (acc, [currency, balance]) => {
+              acc[currency] = balance.total;
+              return acc;
+            },
+            {} as Record<string, number>
+          ),
       };
-      
+
       // Save to file
       await this.reportService.saveStatusReport(report, 'live');
-      
+
       // Send notification
       const balanceText = Object.entries(balances)
         .filter(([_, balance]) => balance.total > 0)
-        .map(([currency, balance]) => 
-          `${currency}: ${balance.available.toFixed(8)} available + ${balance.onOrder.toFixed(8)} in orders`
+        .map(
+          ([currency, balance]) =>
+            `${currency}: ${balance.available.toFixed(8)} available + ${balance.onOrder.toFixed(8)} in orders`
         )
         .slice(0, 5) // Limit to first 5 currencies
         .join('\n');
-      
+
       await this.notificationService.sendNotification(
         `📊 LIVE Trading Status (${runtimeHours}h)\n\n` +
-        `Active Orders: ${this.activeOrders.size}\n` +
-        `Total Trades: ${this.stats.totalTrades}\n` +
-        `Success Rate: ${this.stats.totalTrades > 0 ? ((this.stats.successfulTrades / this.stats.totalTrades) * 100).toFixed(1) : 0}%\n\n` +
-        `Balances:\n${balanceText}`
+          `Active Orders: ${this.activeOrders.size}\n` +
+          `Total Trades: ${this.stats.totalTrades}\n` +
+          `Success Rate: ${this.stats.totalTrades > 0 ? ((this.stats.successfulTrades / this.stats.totalTrades) * 100).toFixed(1) : 0}%\n\n` +
+          `Balances:\n${balanceText}`
       );
-      
     } catch (error) {
       this.logger.error('Error generating status report:', error);
     }
@@ -970,14 +1006,14 @@ export class LiveTrader {
     if (this.activeOrders.size === 0) {
       return;
     }
-    
+
     this.logger.info(`Canceling ${this.activeOrders.size} active orders...`);
-    
+
     try {
       // Get all symbols we're trading
       const symbolsSet = new Set(Array.from(this.activeOrders.values()).map(order => order.symbol));
       const symbols = Array.from(symbolsSet);
-      
+
       // Cancel orders for each symbol
       for (const symbol of symbols) {
         try {
@@ -988,13 +1024,12 @@ export class LiveTrader {
           this.logger.error(`Error canceling orders for ${symbol}:`, error);
         }
       }
-      
+
       // Clear active orders
       this.activeOrders.clear();
-      
+
       this.logger.info('All orders canceled');
       await this.notificationService.sendNotification('All active orders have been canceled');
-      
     } catch (error) {
       this.logger.error('Error canceling all orders:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1014,7 +1049,7 @@ export class LiveTrader {
         this.logger.error(`Error unsubscribing from ${symbol}:`, error);
       }
     });
-    
+
     this.marketDataSubscriptions.clear();
   }
 
@@ -1026,7 +1061,7 @@ export class LiveTrader {
       const balances = await this.getAccountBalances();
       const totalRuntime = Date.now() - this.startTime;
       const runtimeHours = (totalRuntime / (60 * 60 * 1000)).toFixed(2);
-      
+
       const report = {
         startTime: this.startTime,
         endTime: Date.now(),
@@ -1042,29 +1077,31 @@ export class LiveTrader {
           totalTrades: this.stats.totalTrades,
           successfulTrades: this.stats.successfulTrades,
           failedTrades: this.stats.failedTrades,
-          successRate: this.stats.totalTrades > 0 ? ((this.stats.successfulTrades / this.stats.totalTrades) * 100).toFixed(2) : '0',
-          totalCommissions: this.stats.totalCommissions
-        }
+          successRate:
+            this.stats.totalTrades > 0
+              ? ((this.stats.successfulTrades / this.stats.totalTrades) * 100).toFixed(2)
+              : '0',
+          totalCommissions: this.stats.totalCommissions,
+        },
       };
-      
+
       // Save report
       await this.reportService.saveFinalReport(report, 'live');
-      
+
       // Send notification
       const balanceText = Object.entries(report.finalBalances)
         .map(([currency, balance]) => `${currency}: ${balance.total.toFixed(8)}`)
         .slice(0, 5)
         .join('\n');
-      
+
       await this.notificationService.sendNotification(
         `🏁 LIVE Trading Session Completed\n\n` +
-        `Duration: ${report.duration}\n` +
-        `Total Trades: ${report.summary.totalTrades}\n` +
-        `Success Rate: ${report.summary.successRate}%\n` +
-        `Total Commissions: ${report.summary.totalCommissions.toFixed(8)}\n\n` +
-        `Final Balances:\n${balanceText}`
+          `Duration: ${report.duration}\n` +
+          `Total Trades: ${report.summary.totalTrades}\n` +
+          `Success Rate: ${report.summary.successRate}%\n` +
+          `Total Commissions: ${report.summary.totalCommissions.toFixed(8)}\n\n` +
+          `Final Balances:\n${balanceText}`
       );
-      
     } catch (error) {
       this.logger.error('Error generating final report:', error);
     }

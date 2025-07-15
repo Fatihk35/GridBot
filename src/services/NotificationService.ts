@@ -35,7 +35,7 @@ export class NotificationService {
 
   constructor(botConfig: BotConfigType, logger?: Logger) {
     this.logger = logger || Logger.getInstance();
-    
+
     // Extract notification config from bot config
     this.config = NotificationConfigSchema.parse({
       enableConsole: botConfig.logging.enableConsoleOutput,
@@ -55,10 +55,10 @@ export class NotificationService {
     try {
       // Initialize Telegram bot if enabled and configured
       if (this.config.enableTelegram && this.config.telegramBotToken) {
-        this.telegramBot = new TelegramBot(this.config.telegramBotToken, { 
-          polling: false 
+        this.telegramBot = new TelegramBot(this.config.telegramBotToken, {
+          polling: false,
         });
-        
+
         // Test Telegram connection
         try {
           await this.telegramBot.getMe();
@@ -85,7 +85,7 @@ export class NotificationService {
    * Send a notification message
    */
   async sendNotification(
-    message: string, 
+    message: string,
     type: NotificationMessage['type'] = 'info',
     metadata?: Record<string, any>
   ): Promise<void> {
@@ -120,13 +120,14 @@ export class NotificationService {
   ): Promise<void> {
     const emoji = side === 'BUY' ? '🟢' : '🔴';
     const modeText = mode === 'paper' ? 'Paper Trade' : 'Live Trade';
-    
-    const message = `${emoji} ${modeText}: ${action}\n` +
-                   `Symbol: ${symbol}\n` +
-                   `Side: ${side}\n` +
-                   `Price: ${price.toFixed(8)}\n` +
-                   `Quantity: ${quantity.toFixed(8)}\n` +
-                   `Value: ${(price * quantity).toFixed(2)} USDT`;
+
+    const message =
+      `${emoji} ${modeText}: ${action}\n` +
+      `Symbol: ${symbol}\n` +
+      `Side: ${side}\n` +
+      `Price: ${price.toFixed(8)}\n` +
+      `Quantity: ${quantity.toFixed(8)}\n` +
+      `Value: ${(price * quantity).toFixed(2)} USDT`;
 
     await this.sendNotification(message, 'info', {
       action,
@@ -148,7 +149,7 @@ export class NotificationService {
   ): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : error;
     const contextText = context ? `Context: ${context}\n` : '';
-    
+
     const message = `🚨 Error Alert\n${contextText}Error: ${errorMessage}`;
 
     await this.sendNotification(message, 'error', {
@@ -160,22 +161,71 @@ export class NotificationService {
   }
 
   /**
-   * Send status update notification
+   * Send status update notification - overloaded for string status or structured status
    */
+  async sendStatusNotification(status: string, details?: Record<string, any>): Promise<void>;
+  async sendStatusNotification(status: {
+    mode: 'backtest' | 'papertrade' | 'live';
+    balances: { [currency: string]: number };
+    profit: number;
+    trades: number;
+  }): Promise<void>;
   async sendStatusNotification(
-    status: string,
+    status: string | {
+      mode: 'backtest' | 'papertrade' | 'live';
+      balances: { [currency: string]: number };
+      profit: number;
+      trades: number;
+    }, 
     details?: Record<string, any>
   ): Promise<void> {
-    let message = `📊 Status Update: ${status}`;
-    
-    if (details) {
-      message += '\n\nDetails:\n';
-      Object.entries(details).forEach(([key, value]) => {
-        message += `${key}: ${this.formatValue(value)}\n`;
+    if (typeof status === 'string') {
+      // Original string-based status notification
+      let message = `📊 Status Update: ${status}`;
+
+      if (details) {
+        message += '\n\nDetails:\n';
+        Object.entries(details).forEach(([key, value]) => {
+          message += `${key}: ${this.formatValue(value)}\n`;
+        });
+      }
+
+      await this.sendNotification(message, 'info', details);
+    } else {
+      // New structured status notification
+      const { mode, balances, profit, trades } = status;
+      
+      // Format message
+      let modePrefix = '';
+      
+      if (mode === 'backtest') {
+        modePrefix = '[BACKTEST] ';
+      } else if (mode === 'papertrade') {
+        modePrefix = '[PAPER] ';
+      } else if (mode === 'live') {
+        modePrefix = '[LIVE] ';
+      }
+      
+      const profitEmoji = profit >= 0 ? '📈' : '📉';
+      const balanceText = Object.entries(balances)
+        .map(([currency, balance]) => `${balance.toFixed(8)} ${currency}`)
+        .join(', ');
+      
+      const message = `${modePrefix}Status Update\n\n${profitEmoji} Profit: ${profit.toFixed(8)}\n💰 Balances: ${balanceText}\n🔄 Trades: ${trades}`;
+      
+      // Calculate profit percentage safely
+      const totalBalance = Object.values(balances).reduce((sum, balance) => sum + balance, 0);
+      const profitPercentage = totalBalance > 0 ? ((profit / totalBalance) * 100).toFixed(2) : '0.00';
+      
+      // Send notification
+      await this.sendNotification(message, 'info', {
+        mode,
+        balances,
+        profit,
+        trades,
+        profitPercentage,
       });
     }
-
-    await this.sendNotification(message, 'info', details);
   }
 
   /**
@@ -218,7 +268,7 @@ export class NotificationService {
       timestamp,
       metadata: notification.metadata,
     };
-    
+
     // Use type assertion to handle dynamic method access
     (this.logger[logMethod] as (message: string, meta?: unknown) => void)(message, metadata);
   }
@@ -245,7 +295,7 @@ export class NotificationService {
     }
 
     const message = this.formatTelegramMessage(notification);
-    
+
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
         await this.telegramBot.sendMessage(this.config.telegramChatId, message, {
@@ -255,12 +305,12 @@ export class NotificationService {
         return; // Success
       } catch (error) {
         this.logger.warn(`Telegram notification attempt ${attempt} failed:`, error);
-        
+
         if (attempt === this.config.maxRetries) {
           this.logger.error('All Telegram notification attempts failed');
           return;
         }
-        
+
         // Wait before retry
         await this.delay(this.config.retryDelay * attempt);
       }
@@ -273,18 +323,18 @@ export class NotificationService {
   private formatTelegramMessage(notification: NotificationMessage): string {
     const timestamp = new Date(notification.timestamp).toLocaleString();
     const icon = this.getIconForType(notification.type);
-    
+
     let message = `${icon} *${notification.title}*\n\n${notification.message}`;
-    
+
     if (notification.metadata && Object.keys(notification.metadata).length > 0) {
       message += '\n\n_Metadata:_\n';
       Object.entries(notification.metadata).forEach(([key, value]) => {
         message += `• ${key}: \`${this.formatValue(value)}\`\n`;
       });
     }
-    
+
     message += `\n_${timestamp}_`;
-    
+
     return message;
   }
 
@@ -348,6 +398,112 @@ export class NotificationService {
   }
 
   /**
+   * Send trade notification with specific formatting for the task example
+   */
+  async sendTradeNotification(trade: {
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    price: number;
+    quantity: number;
+    mode: 'backtest' | 'papertrade' | 'live';
+  }): Promise<void> {
+    const { symbol, side, price, quantity, mode } = trade;
+    
+    // Format message
+    let emoji = side === 'BUY' ? '🟢' : '🔴';
+    let modePrefix = '';
+    
+    if (mode === 'backtest') {
+      modePrefix = '[BACKTEST] ';
+    } else if (mode === 'papertrade') {
+      modePrefix = '[PAPER] ';
+    } else if (mode === 'live') {
+      modePrefix = '[LIVE] ';
+      emoji = side === 'BUY' ? '🟢🟢🟢' : '🔴🔴🔴'; // More emphasis for live trades
+    }
+    
+    const message = `${modePrefix}${emoji} ${side} ${quantity} ${symbol} @ ${price}`;
+    
+    // Send notification
+    await this.sendNotification(message, 'info', {
+      symbol,
+      side,
+      price,
+      quantity,
+      mode,
+      value: price * quantity,
+    });
+  }
+
+  /**
+   * Log method with specific log levels as per task requirements
+   */
+  log(message: string, level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' = 'INFO'): void {
+    if (!this.config.enableConsole) return;
+    
+    const timestamp = new Date().toISOString();
+    const formattedMessage = `[${timestamp}] [${level}] ${message}`;
+    
+    switch (level) {
+      case 'DEBUG':
+        this.logger.debug(formattedMessage);
+        break;
+      case 'INFO':
+        this.logger.info(formattedMessage);
+        break;
+      case 'WARNING':
+        this.logger.warn(formattedMessage);
+        break;
+      case 'ERROR':
+        this.logger.error(formattedMessage);
+        break;
+    }
+  }
+
+  /**
+   * Performance monitoring helper
+   */
+  async sendPerformanceNotification(metrics: {
+    memoryUsage: NodeJS.MemoryUsage;
+    uptime: number;
+    activeConnections: number;
+    errorRate: number;
+  }): Promise<void> {
+    const { memoryUsage, uptime, activeConnections, errorRate } = metrics;
+    
+    const uptimeHours = (uptime / 3600).toFixed(2);
+    const memoryMB = (memoryUsage.rss / 1024 / 1024).toFixed(2);
+    const heapMB = (memoryUsage.heapUsed / 1024 / 1024).toFixed(2);
+    
+    let status = '🟢 Good';
+    let notificationType: NotificationMessage['type'] = 'info';
+    
+    if (errorRate > 0.1 || memoryUsage.heapUsed > memoryUsage.heapTotal * 0.9) {
+      status = '🔴 Critical';
+      notificationType = 'error';
+    } else if (errorRate > 0.05 || memoryUsage.heapUsed > memoryUsage.heapTotal * 0.7) {
+      status = '🟡 Warning';
+      notificationType = 'warning';
+    }
+    
+    const message = `📊 Performance Status: ${status}\n\n` +
+                   `⏱️ Uptime: ${uptimeHours}h\n` +
+                   `💾 Memory: ${memoryMB}MB (Heap: ${heapMB}MB)\n` +
+                   `🔗 Connections: ${activeConnections}\n` +
+                   `⚠️ Error Rate: ${(errorRate * 100).toFixed(2)}%`;
+    
+    await this.sendNotification(message, notificationType, {
+      performance: {
+        memoryUsage,
+        uptime,
+        activeConnections,
+        errorRate,
+        status: status.replace(/[🟢🟡🔴] /, ''),
+      },
+    });
+  }
+
+  /**
    * Cleanup resources
    */
   async destroy(): Promise<void> {
@@ -358,7 +514,7 @@ export class NotificationService {
         this.logger.warn('Error closing Telegram bot:', error);
       }
     }
-    
+
     this.logger.info('NotificationService destroyed');
   }
 }

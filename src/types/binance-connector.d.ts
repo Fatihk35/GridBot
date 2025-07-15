@@ -45,7 +45,12 @@ declare module '@binance/connector' {
 
     klines(symbol: string, interval: string, options?: KlineParams): Promise<ApiResponse>;
     account(): Promise<ApiResponse>;
-    newOrder(symbol: string, side: string, type: string, options?: OrderParams): Promise<ApiResponse>;
+    newOrder(
+      symbol: string,
+      side: string,
+      type: string,
+      options?: OrderParams
+    ): Promise<ApiResponse>;
     cancelOrder(symbol: string, options?: CancelOrderParams): Promise<ApiResponse>;
     getOrder(symbol: string, options?: QueryOrderParams): Promise<ApiResponse>;
     tickerPrice(symbol?: string): Promise<ApiResponse>;

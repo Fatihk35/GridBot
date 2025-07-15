@@ -30,7 +30,7 @@ import {
   OrderSimulationResult,
   HistoricalDataResult,
   DataSourceConfig,
-  MarketDataStats
+  MarketDataStats,
 } from '../types/backtest';
 
 /**
@@ -44,7 +44,7 @@ class BacktestPortfolioManager {
   private portfolioHistory: PortfolioSnapshot[] = [];
   private unrealizedPnL: number = 0;
   private realizedPnL: number = 0;
-  
+
   constructor(initialBalance: number, quoteCurrency: string, commissionRate: number) {
     this.quoteBalance = initialBalance;
     this.quoteCurrency = quoteCurrency;
@@ -60,13 +60,13 @@ class BacktestPortfolioManager {
     if (!baseCurrency) {
       throw new Error(`Invalid symbol format: ${symbol}`);
     }
-    
+
     const cost = quantity * price + commission;
-    
+
     if (this.quoteBalance < cost) {
       throw new Error(`Insufficient ${this.quoteCurrency} balance for buy order`);
     }
-    
+
     this.quoteBalance -= cost;
     const currentBase = this.baseBalances.get(baseCurrency) || 0;
     this.baseBalances.set(baseCurrency, currentBase + quantity);
@@ -81,20 +81,20 @@ class BacktestPortfolioManager {
     if (!baseCurrency) {
       throw new Error(`Invalid symbol format: ${symbol}`);
     }
-    
+
     const currentBase = this.baseBalances.get(baseCurrency) || 0;
-    
+
     if (currentBase < quantity) {
       throw new Error(`Insufficient ${baseCurrency} balance for sell order`);
     }
-    
+
     const proceeds = quantity * price - commission;
-    const profit = proceeds - (quantity * this.getAverageCost(baseCurrency, quantity));
-    
+    const profit = proceeds - quantity * this.getAverageCost(baseCurrency, quantity);
+
     this.baseBalances.set(baseCurrency, currentBase - quantity);
     this.quoteBalance += proceeds;
     this.realizedPnL += profit;
-    
+
     return profit;
   }
 
@@ -103,7 +103,7 @@ class BacktestPortfolioManager {
    */
   calculateTotalValue(currentPrices: Map<string, number>): number {
     let totalValue = this.quoteBalance;
-    
+
     for (const [baseCurrency, balance] of this.baseBalances) {
       if (balance > 0) {
         const symbol = `${baseCurrency}/${this.quoteCurrency}`;
@@ -111,16 +111,20 @@ class BacktestPortfolioManager {
         totalValue += balance * price;
       }
     }
-    
+
     return totalValue;
   }
 
   /**
    * Take portfolio snapshot
    */
-  takeSnapshot(timestamp: number, currentPrices: Map<string, number>, initialBalance: number): void {
+  takeSnapshot(
+    timestamp: number,
+    currentPrices: Map<string, number>,
+    initialBalance: number
+  ): void {
     const totalValue = this.calculateTotalValue(currentPrices);
-    
+
     // Calculate unrealized PnL
     this.unrealizedPnL = 0;
     for (const [baseCurrency, balance] of this.baseBalances) {
@@ -132,14 +136,15 @@ class BacktestPortfolioManager {
         this.unrealizedPnL += currentValue - costBasis;
       }
     }
-    
+
     // Calculate drawdown
-    const highWaterMark = this.portfolioHistory.length > 0 
-      ? Math.max(...this.portfolioHistory.map(s => s.totalValue), totalValue)
-      : totalValue;
+    const highWaterMark =
+      this.portfolioHistory.length > 0
+        ? Math.max(...this.portfolioHistory.map(s => s.totalValue), totalValue)
+        : totalValue;
     const drawdown = Math.max(0, highWaterMark - totalValue);
     const drawdownPercentage = highWaterMark > 0 ? drawdown / highWaterMark : 0;
-    
+
     const snapshot: PortfolioSnapshot = {
       timestamp,
       totalValue,
@@ -148,9 +153,9 @@ class BacktestPortfolioManager {
       unrealizedPnL: this.unrealizedPnL,
       realizedPnL: this.realizedPnL,
       drawdown,
-      drawdownPercentage
+      drawdownPercentage,
     };
-    
+
     this.portfolioHistory.push(snapshot);
   }
 
@@ -176,7 +181,7 @@ class BacktestPortfolioManager {
   getCurrentBalances(): { baseBalances: Map<string, number>; quoteBalance: number } {
     return {
       baseBalances: new Map(this.baseBalances),
-      quoteBalance: this.quoteBalance
+      quoteBalance: this.quoteBalance,
     };
   }
 }
@@ -189,8 +194,9 @@ class OrderSimulator {
    * Simulate order execution with slippage and market conditions
    */
   static simulateOrder(params: OrderSimulationParams): OrderSimulationResult {
-    const { symbol, side, type, quantity, price, candle, slippagePercentage, commissionRate } = params;
-    
+    const { symbol, side, type, quantity, price, candle, slippagePercentage, commissionRate } =
+      params;
+
     let executionPrice: number;
     let executed = false;
     let slippage = 0;
@@ -245,7 +251,7 @@ class OrderSimulator {
       slippage,
       commission: executed ? commission : 0,
       value: executed ? value : 0,
-      ...(reason && { reason })
+      ...(reason && { reason }),
     };
   }
 }
@@ -260,7 +266,7 @@ export class Backtester {
   private reportService: ReportService;
   private logger: Logger;
   private performanceCalculator: PerformanceCalculator;
-  
+
   private dataSourceConfig: DataSourceConfig;
   private executionContext?: BacktestExecutionContext;
 
@@ -278,13 +284,13 @@ export class Backtester {
     this.reportService = reportService;
     this.logger = logger || Logger.getInstance();
     this.performanceCalculator = new PerformanceCalculator();
-    
+
     this.dataSourceConfig = {
       type: 'binance',
       cachePath: path.join(this.config.logging.reportDirectory, 'historical_data'),
       enableCache: options?.disableCache ? false : true,
       maxRetries: 3,
-      retryDelayMs: 1000
+      retryDelayMs: 1000,
     };
   }
 
@@ -293,11 +299,11 @@ export class Backtester {
    */
   async runBacktest(backtestConfig: BacktestConfig): Promise<BacktestResult> {
     const startTime = Date.now();
-    
+
     try {
       // Validate configuration
       BacktestConfigSchema.parse(backtestConfig);
-      
+
       const resultId = uuidv4();
       this.logger.info(`Starting backtest ${resultId}`, { config: backtestConfig });
 
@@ -310,7 +316,7 @@ export class Backtester {
         isRunning: true,
         isPaused: false,
         canCancel: true,
-        errorsEncountered: []
+        errorsEncountered: [],
       };
 
       // Load historical data for all symbols
@@ -337,7 +343,10 @@ export class Backtester {
       for (const symbol of backtestConfig.symbols) {
         const dataResult = historicalDataMap.get(symbol)!;
         const initialData = dataResult.data.slice(0, 500); // First 500 candles for indicators
-        this.strategyEngine.initializeStrategy(symbol, this.convertCandlesToStrategyFormat(initialData));
+        this.strategyEngine.initializeStrategy(
+          symbol,
+          this.convertCandlesToStrategyFormat(initialData)
+        );
       }
 
       // Track trades and performance
@@ -360,7 +369,9 @@ export class Backtester {
         portfolioManager,
         allTrades,
         errorsEncountered,
-        (processed) => { dataPointsProcessed = processed; }
+        processed => {
+          dataPointsProcessed = processed;
+        }
       );
 
       // Calculate performance metrics
@@ -390,43 +401,44 @@ export class Backtester {
         startTime: backtestConfig.startTime,
         endTime: backtestConfig.endTime,
         duration: backtestConfig.endTime - backtestConfig.startTime,
-        
+
         // Portfolio metrics
         initialBalance: backtestConfig.initialBalance,
-        finalBalance: portfolioHistory[portfolioHistory.length - 1]?.totalValue || backtestConfig.initialBalance,
+        finalBalance:
+          portfolioHistory[portfolioHistory.length - 1]?.totalValue ||
+          backtestConfig.initialBalance,
         ...overallPerformance,
-        
+
         // Trading metrics
         ...tradingMetrics,
-        
+
         // Performance by symbol
         symbolPerformance,
-        
+
         // Time series data
         portfolioHistory,
         trades: allTrades,
-        
+
         // Execution metrics
         executionTimeMs: Date.now() - startTime,
         dataPointsProcessed,
         errorsEncountered: this.executionContext?.errorsEncountered || [],
-        
+
         // Metadata
         createdAt: startTime,
-        version: '1.0.0'
+        version: '1.0.0',
       };
 
       // Save report
       await this.reportService.saveBacktestReport(result);
-      
+
       this.logger.info(`Backtest ${resultId} completed successfully`, {
         duration: result.executionTimeMs,
         trades: result.totalTrades,
-        return: result.totalReturnPercentage
+        return: result.totalReturnPercentage,
       });
 
       return result;
-
     } catch (error) {
       this.logger.error('Backtest failed:', error);
       throw error;
@@ -448,7 +460,7 @@ export class Backtester {
   ): Promise<HistoricalDataResult> {
     const loadStartTime = Date.now();
     let dataSource: 'cache' | 'api' = 'api';
-    
+
     // Try to load from cache first
     if (this.dataSourceConfig.enableCache) {
       try {
@@ -456,7 +468,7 @@ export class Backtester {
         if (cacheResult) {
           dataSource = 'cache';
           this.logger.info(`Loaded ${symbol} data from cache: ${cacheResult.length} candles`);
-          
+
           return {
             symbol,
             interval,
@@ -464,7 +476,7 @@ export class Backtester {
             startTime,
             endTime,
             dataSource,
-            loadTimeMs: Date.now() - loadStartTime
+            loadTimeMs: Date.now() - loadStartTime,
           };
         }
       } catch (error) {
@@ -481,21 +493,24 @@ export class Backtester {
           interval: interval as any, // Cast to BinanceInterval
           startTime,
           endTime,
-          limit: 1000
+          limit: 1000,
         });
 
         data = this.convertRawKlinesToCandles(rawData, symbol);
-        this.logger.info(`Loaded ${symbol} data from API: ${data.length} candles (attempt ${attempt})`);
+        this.logger.info(
+          `Loaded ${symbol} data from API: ${data.length} candles (attempt ${attempt})`
+        );
         break;
-
       } catch (error) {
         this.logger.warn(`API load attempt ${attempt} failed for ${symbol}:`, error);
-        
+
         if (attempt === this.dataSourceConfig.maxRetries) {
           throw new Error(`Failed to load data for ${symbol} after ${attempt} attempts`);
         }
-        
-        await new Promise(resolve => setTimeout(resolve, this.dataSourceConfig.retryDelayMs * attempt));
+
+        await new Promise(resolve =>
+          setTimeout(resolve, this.dataSourceConfig.retryDelayMs * attempt)
+        );
       }
     }
 
@@ -515,7 +530,7 @@ export class Backtester {
       startTime,
       endTime,
       dataSource,
-      loadTimeMs: Date.now() - loadStartTime
+      loadTimeMs: Date.now() - loadStartTime,
     };
   }
 
@@ -538,7 +553,10 @@ export class Backtester {
     for (const dataResult of historicalDataMap.values()) {
       if (dataResult.data.length > 0) {
         minTimestamp = Math.min(minTimestamp, dataResult.data[0]?.timestamp || Infinity);
-        maxTimestamp = Math.max(maxTimestamp, dataResult.data[dataResult.data.length - 1]?.timestamp || 0);
+        maxTimestamp = Math.max(
+          maxTimestamp,
+          dataResult.data[dataResult.data.length - 1]?.timestamp || 0
+        );
         totalCandles += dataResult.data.length;
       }
     }
@@ -558,7 +576,8 @@ export class Backtester {
     let lastSnapshotTime = minTimestamp;
 
     // Simulate trading minute by minute
-    for (let currentTime = minTimestamp; currentTime <= maxTimestamp; currentTime += 60000) { // 1-minute intervals
+    for (let currentTime = minTimestamp; currentTime <= maxTimestamp; currentTime += 60000) {
+      // 1-minute intervals
       if (!this.executionContext?.isRunning) {
         throw new Error('Backtest was cancelled');
       }
@@ -570,7 +589,7 @@ export class Backtester {
         try {
           const dataResult = historicalDataMap.get(symbol)!;
           const currentIndex = dataIterators.get(symbol)!;
-          
+
           if (currentIndex >= dataResult.data.length) continue;
 
           const candle = dataResult.data[currentIndex];
@@ -580,14 +599,18 @@ export class Backtester {
           currentPrices.set(symbol, candle.close);
 
           // Update strategy state
-          this.strategyEngine.updateState(symbol, {
-            timestamp: candle.timestamp,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-            volume: candle.volume
-          }, []); // Empty historical data array for performance
+          this.strategyEngine.updateState(
+            symbol,
+            {
+              timestamp: candle.timestamp,
+              open: candle.open,
+              high: candle.high,
+              low: candle.low,
+              close: candle.close,
+              volume: candle.volume,
+            },
+            []
+          ); // Empty historical data array for performance
 
           // Get trading signals
           let signals;
@@ -613,14 +636,19 @@ export class Backtester {
                 price: buySignal.price,
                 candle,
                 slippagePercentage: config.slippagePercentage,
-                commissionRate: this.config.binanceSettings.commissionRate
+                commissionRate: this.config.binanceSettings.commissionRate,
               };
 
               const result = OrderSimulator.simulateOrder(orderParams);
-              
+
               if (result.executed) {
-                portfolioManager.executeBuy(symbol, result.executedQuantity, result.executionPrice, result.commission);
-                
+                portfolioManager.executeBuy(
+                  symbol,
+                  result.executedQuantity,
+                  result.executionPrice,
+                  result.commission
+                );
+
                 const trade: BacktestTrade = {
                   id: uuidv4(),
                   timestamp: candle.timestamp,
@@ -634,7 +662,7 @@ export class Backtester {
                   gridLevel: buySignal.price,
                   executionPrice: result.executionPrice,
                   slippage: result.slippage,
-                  candleTime: candle.timestamp
+                  candleTime: candle.timestamp,
                 };
 
                 allTrades.push(trade);
@@ -657,14 +685,19 @@ export class Backtester {
                 price: sellSignal.price,
                 candle,
                 slippagePercentage: config.slippagePercentage,
-                commissionRate: this.config.binanceSettings.commissionRate
+                commissionRate: this.config.binanceSettings.commissionRate,
               };
 
               const result = OrderSimulator.simulateOrder(orderParams);
-              
+
               if (result.executed) {
-                const profit = portfolioManager.executeSell(symbol, result.executedQuantity, result.executionPrice, result.commission);
-                
+                const profit = portfolioManager.executeSell(
+                  symbol,
+                  result.executedQuantity,
+                  result.executionPrice,
+                  result.commission
+                );
+
                 const trade: BacktestTrade = {
                   id: uuidv4(),
                   timestamp: candle.timestamp,
@@ -679,7 +712,7 @@ export class Backtester {
                   gridLevel: sellSignal.price,
                   executionPrice: result.executionPrice,
                   slippage: result.slippage,
-                  candleTime: candle.timestamp
+                  candleTime: candle.timestamp,
                 };
 
                 allTrades.push(trade);
@@ -692,7 +725,6 @@ export class Backtester {
           // Move to next candle
           dataIterators.set(symbol, currentIndex + 1);
           processedCandles++;
-
         } catch (error) {
           errorsEncountered.push(`Error processing ${symbol} at ${currentTime}: ${error}`);
         }
@@ -707,7 +739,7 @@ export class Backtester {
       // Update progress
       if (processedCandles % 1000 === 0) {
         progressCallback(processedCandles);
-        
+
         // Update execution context progress
         if (this.executionContext) {
           const progress = (currentTime - minTimestamp) / (maxTimestamp - minTimestamp);
@@ -744,7 +776,7 @@ export class Backtester {
       low: kline.low,
       close: kline.close,
       volume: kline.volume,
-      symbol
+      symbol,
     }));
   }
 
@@ -758,7 +790,7 @@ export class Backtester {
       high: candle.high,
       low: candle.low,
       close: candle.close,
-      volume: candle.volume
+      volume: candle.volume,
     }));
   }
 
@@ -778,7 +810,7 @@ export class Backtester {
         averagePrice: 0,
         volatility: 0,
         volume: 0,
-        candleCount: 0
+        candleCount: 0,
       };
     }
 
@@ -786,12 +818,12 @@ export class Backtester {
     const endPrice = data[data.length - 1]?.close || 0;
     const priceChange = endPrice - startPrice;
     const priceChangePercentage = startPrice > 0 ? (priceChange / startPrice) * 100 : 0;
-    
+
     const high = Math.max(...data.map(c => c.high));
     const low = Math.min(...data.map(c => c.low));
     const averagePrice = data.reduce((sum, c) => sum + c.close, 0) / data.length;
     const volume = data.reduce((sum, c) => sum + c.volume, 0);
-    
+
     // Calculate volatility (standard deviation of returns)
     const returns = [];
     for (let i = 1; i < data.length; i++) {
@@ -801,11 +833,12 @@ export class Backtester {
         returns.push((currentClose - prevClose) / prevClose);
       }
     }
-    
+
     const avgReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-    const volatility = Math.sqrt(
-      returns.reduce((sum, ret) => sum + Math.pow(ret - avgReturn, 2), 0) / (returns.length - 1)
-    ) * 100;
+    const volatility =
+      Math.sqrt(
+        returns.reduce((sum, ret) => sum + Math.pow(ret - avgReturn, 2), 0) / (returns.length - 1)
+      ) * 100;
 
     return {
       symbol,
@@ -818,7 +851,7 @@ export class Backtester {
       averagePrice,
       volatility: isNaN(volatility) ? 0 : volatility,
       volume,
-      candleCount: data.length
+      candleCount: data.length,
     };
   }
 

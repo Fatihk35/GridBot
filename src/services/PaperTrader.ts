@@ -14,13 +14,13 @@ import { NotificationService } from '@/services/NotificationService';
 import { ReportService } from '@/services/ReportService';
 import { Logger } from '@/utils/logger';
 import { CandlestickData } from '@/utils/indicators';
-import { 
-  VirtualBalance, 
-  VirtualOrder, 
-  PaperTradingState, 
+import {
+  VirtualBalance,
+  VirtualOrder,
+  PaperTradingState,
   PaperTradingResult,
   PaperTradingConfig,
-  MarketDataBar
+  MarketDataBar,
 } from '@/types';
 import { BinanceWebSocketKline } from '@/types/binance';
 
@@ -63,7 +63,7 @@ interface PaperTraderEvents {
   'order-canceled': (order: VirtualOrder) => void;
   'balance-updated': (balances: VirtualBalance) => void;
   'profit-realized': (profit: number, symbol: string) => void;
-  'error': (error: Error) => void;
+  error: (error: Error) => void;
   'status-update': (status: string) => void;
 }
 
@@ -85,12 +85,15 @@ export class PaperTrader extends EventEmitter {
   private startTime: number = 0;
 
   // Performance tracking
-  private performanceData: Map<string, {
-    totalTrades: number;
-    winningTrades: number;
-    totalProfit: number;
-    lastPrice: number;
-  }> = new Map();
+  private performanceData: Map<
+    string,
+    {
+      totalTrades: number;
+      winningTrades: number;
+      totalProfit: number;
+      lastPrice: number;
+    }
+  > = new Map();
 
   constructor(
     config: BotConfigType,
@@ -102,7 +105,7 @@ export class PaperTrader extends EventEmitter {
     logger?: Logger
   ) {
     super();
-    
+
     this.config = config;
     this.binanceService = binanceService;
     this.strategyEngine = strategyEngine;
@@ -190,7 +193,6 @@ export class PaperTrader extends EventEmitter {
 
       this.emit('status-update', 'started');
       this.logger.info('Paper trading started successfully');
-
     } catch (error) {
       this.state.isRunning = false;
       this.logger.error('Failed to start paper trading:', error);
@@ -227,14 +229,10 @@ export class PaperTrader extends EventEmitter {
       await this.generateFinalReport();
 
       // Send stop notification
-      await this.notificationService.sendNotification(
-        'Paper trading stopped',
-        'info'
-      );
+      await this.notificationService.sendNotification('Paper trading stopped', 'info');
 
       this.emit('status-update', 'stopped');
       this.logger.info('Paper trading stopped successfully');
-
     } catch (error) {
       this.logger.error('Error stopping paper trading:', error);
       await this.notificationService.sendErrorNotification(
@@ -252,14 +250,14 @@ export class PaperTrader extends EventEmitter {
 
     for (const symbolConfig of this.config.symbols) {
       const symbol = symbolConfig.pair;
-      
+
       try {
         this.logger.info(`Initializing strategy for ${symbol}...`);
 
         // Fetch historical data for initial calculations
         const endTime = Date.now();
-        const startTime = endTime - (500 * 60 * 1000); // 500 minutes of 1m candles
-        
+        const startTime = endTime - 500 * 60 * 1000; // 500 minutes of 1m candles
+
         const historicalData = await this.binanceService.getHistoricalKlines({
           symbol,
           interval: '1m' as any,
@@ -289,7 +287,6 @@ export class PaperTrader extends EventEmitter {
         });
 
         this.logger.info(`Strategy initialized for ${symbol}`);
-
       } catch (error) {
         this.logger.error(`Failed to initialize strategy for ${symbol}:`, error);
         await this.notificationService.sendErrorNotification(
@@ -309,18 +306,19 @@ export class PaperTrader extends EventEmitter {
 
     for (const symbolConfig of this.config.symbols) {
       const symbol = symbolConfig.pair;
-      
+
       try {
         this.logger.info(`Subscribing to real-time data for ${symbol}...`);
 
         const subscriptionId = this.binanceService.subscribeToKlineUpdates(
-          symbol, 
-          '1m' as any, 
+          symbol,
+          '1m' as any,
           (kline: BinanceWebSocketKline) => {
             if (!this.state.isRunning) return;
 
             // Process only completed candles
-            if (kline.k.x) { // x indicates if kline is closed
+            if (kline.k.x) {
+              // x indicates if kline is closed
               this.processKline(symbol, kline);
             }
           }
@@ -328,7 +326,6 @@ export class PaperTrader extends EventEmitter {
 
         this.marketDataSubscriptions.set(symbol, subscriptionId);
         this.logger.info(`Subscribed to real-time data for ${symbol}`);
-
       } catch (error) {
         this.logger.error(`Failed to subscribe to market data for ${symbol}:`, error);
         await this.notificationService.sendErrorNotification(
@@ -398,7 +395,6 @@ export class PaperTrader extends EventEmitter {
 
       // Update performance data
       this.updatePerformanceData(symbol, bar.close);
-
     } catch (error) {
       this.logger.error(`Error processing kline for ${symbol}:`, error);
       this.emit('error', error as Error);
@@ -410,7 +406,7 @@ export class PaperTrader extends EventEmitter {
    */
   private async processTradeSignals(
     symbol: string,
-    signals: { buy: any[], sell: any[] },
+    signals: { buy: any[]; sell: any[] },
     currentPrice: number
   ): Promise<void> {
     // Process buy signals
@@ -420,7 +416,7 @@ export class PaperTrader extends EventEmitter {
         side: 'BUY',
         type: 'LIMIT',
         price: buySignal.price,
-        quantity: buySignal.quantity || (buySignal.gridLevel?.buySize / buySignal.price) || 0,
+        quantity: buySignal.quantity || buySignal.gridLevel?.buySize / buySignal.price || 0,
         gridLevelIndex: buySignal.gridLevel?.index,
       });
     }
@@ -468,7 +464,10 @@ export class PaperTrader extends EventEmitter {
 
       if (side === 'BUY') {
         const requiredBalance = price * quantity * (1 + this.config.binanceSettings.commissionRate);
-        if (!this.state.virtualBalances[quoteCurrency] || this.state.virtualBalances[quoteCurrency] < requiredBalance) {
+        if (
+          !this.state.virtualBalances[quoteCurrency] ||
+          this.state.virtualBalances[quoteCurrency] < requiredBalance
+        ) {
           this.logger.warn(`Insufficient ${quoteCurrency} balance for BUY order`, {
             required: requiredBalance,
             available: this.state.virtualBalances[quoteCurrency] || 0,
@@ -476,7 +475,10 @@ export class PaperTrader extends EventEmitter {
           return null;
         }
       } else {
-        if (!this.state.virtualBalances[baseCurrency] || this.state.virtualBalances[baseCurrency] < quantity) {
+        if (
+          !this.state.virtualBalances[baseCurrency] ||
+          this.state.virtualBalances[baseCurrency] < quantity
+        ) {
           this.logger.warn(`Insufficient ${baseCurrency} balance for SELL order`, {
             required: quantity,
             available: this.state.virtualBalances[baseCurrency] || 0,
@@ -530,7 +532,6 @@ export class PaperTrader extends EventEmitter {
       }
 
       return orderId;
-
     } catch (error) {
       this.logger.error('Failed to create virtual order:', error);
       this.emit('error', error as Error);
@@ -542,8 +543,9 @@ export class PaperTrader extends EventEmitter {
    * Process virtual orders against market data
    */
   private async processVirtualOrders(symbol: string, bar: MarketDataBar): Promise<void> {
-    const ordersToProcess = Array.from(this.state.virtualOrders.values())
-      .filter(order => order.symbol === symbol && order.status === 'NEW');
+    const ordersToProcess = Array.from(this.state.virtualOrders.values()).filter(
+      order => order.symbol === symbol && order.status === 'NEW'
+    );
 
     for (const order of ordersToProcess) {
       await this.checkOrderExecution(order, bar);
@@ -555,7 +557,7 @@ export class PaperTrader extends EventEmitter {
    */
   private async checkOrderExecution(order: VirtualOrder, bar: MarketDataBar): Promise<void> {
     const shouldFill = this.shouldFillOrder(order, bar);
-    
+
     if (shouldFill) {
       await this.fillOrder(order, bar);
     }
@@ -590,9 +592,7 @@ export class PaperTrader extends EventEmitter {
       let fillPrice = order.price;
       if (this.paperConfig.slippageRate > 0) {
         const slippage = order.price * this.paperConfig.slippageRate;
-        fillPrice = order.side === 'BUY' ? 
-          order.price + slippage : 
-          order.price - slippage;
+        fillPrice = order.side === 'BUY' ? order.price + slippage : order.price - slippage;
       }
 
       // Update order
@@ -606,7 +606,7 @@ export class PaperTrader extends EventEmitter {
 
       // Update performance tracking
       this.state.totalTrades++;
-      
+
       // Emit events
       this.emit('order-filled', order);
 
@@ -629,7 +629,6 @@ export class PaperTrader extends EventEmitter {
           'paper'
         );
       }
-
     } catch (error) {
       this.logger.error('Failed to fill order:', error);
       this.emit('error', error as Error);
@@ -646,24 +645,23 @@ export class PaperTrader extends EventEmitter {
       // Deduct quote currency (e.g., USDT)
       const cost = order.price * order.quantity;
       const commission = cost * this.config.binanceSettings.commissionRate;
-      
-      this.state.virtualBalances[quoteCurrency] = 
+
+      this.state.virtualBalances[quoteCurrency] =
         (this.state.virtualBalances[quoteCurrency] || 0) - (cost + commission);
 
       // Add base currency (e.g., BTC)
-      this.state.virtualBalances[baseCurrency] = 
+      this.state.virtualBalances[baseCurrency] =
         (this.state.virtualBalances[baseCurrency] || 0) + order.quantity;
-
     } else {
       // Deduct base currency
-      this.state.virtualBalances[baseCurrency] = 
+      this.state.virtualBalances[baseCurrency] =
         (this.state.virtualBalances[baseCurrency] || 0) - order.quantity;
 
       // Add quote currency
       const proceeds = order.price * order.quantity;
       const commission = proceeds * this.config.binanceSettings.commissionRate;
-      
-      this.state.virtualBalances[quoteCurrency] = 
+
+      this.state.virtualBalances[quoteCurrency] =
         (this.state.virtualBalances[quoteCurrency] || 0) + (proceeds - commission);
 
       // Calculate realized profit
@@ -708,7 +706,7 @@ export class PaperTrader extends EventEmitter {
   private handleBalanceUpdated(balances: VirtualBalance): void {
     // Update max drawdown
     const totalValue = this.calculateTotalPortfolioValue(balances);
-    
+
     if (totalValue > this.state.highestBalance) {
       this.state.highestBalance = totalValue;
     } else {
@@ -740,10 +738,10 @@ export class PaperTrader extends EventEmitter {
    */
   private startPeriodicReporting(): void {
     const intervalMs = this.paperConfig.reportingInterval * 60 * 1000;
-    
+
     this.reportingInterval = setInterval(async () => {
       if (!this.state.isRunning) return;
-      
+
       try {
         await this.generateStatusReport();
       } catch (error) {
@@ -751,7 +749,9 @@ export class PaperTrader extends EventEmitter {
       }
     }, intervalMs);
 
-    this.logger.info(`Periodic reporting started (interval: ${this.paperConfig.reportingInterval} minutes)`);
+    this.logger.info(
+      `Periodic reporting started (interval: ${this.paperConfig.reportingInterval} minutes)`
+    );
   }
 
   /**
@@ -762,8 +762,9 @@ export class PaperTrader extends EventEmitter {
       time: Date.now(),
       mode: 'papertrade' as const,
       balances: this.state.virtualBalances,
-      openOrders: Array.from(this.state.virtualOrders.values())
-        .filter(order => order.status === 'NEW'),
+      openOrders: Array.from(this.state.virtualOrders.values()).filter(
+        order => order.status === 'NEW'
+      ),
       performance: {
         totalReturn: this.state.totalProfit,
         drawdown: this.state.maxDrawdown * 100,
@@ -776,15 +777,12 @@ export class PaperTrader extends EventEmitter {
 
     // Send notification
     if (this.paperConfig.enableNotifications) {
-      await this.notificationService.sendStatusNotification(
-        'Paper Trading Status',
-        {
-          ...report.performance,
-          balances: Object.entries(this.state.virtualBalances)
-            .map(([currency, balance]) => `${balance.toFixed(8)} ${currency}`)
-            .join(', '),
-        }
-      );
+      await this.notificationService.sendStatusNotification('Paper Trading Status', {
+        ...report.performance,
+        balances: Object.entries(this.state.virtualBalances)
+          .map(([currency, balance]) => `${balance.toFixed(8)} ${currency}`)
+          .join(', '),
+      });
     }
 
     this.logger.info('Status report generated', report);
@@ -802,7 +800,7 @@ export class PaperTrader extends EventEmitter {
     for (const symbolConfig of this.config.symbols) {
       const symbol = symbolConfig.pair;
       const perfData = this.performanceData.get(symbol);
-      
+
       const result: PaperTradingResult = {
         symbol,
         startTime: this.state.startTime,
@@ -815,11 +813,14 @@ export class PaperTrader extends EventEmitter {
         totalTrades: this.state.totalTrades,
         winningTrades: perfData?.winningTrades || 0,
         losingTrades: this.state.totalTrades - (perfData?.winningTrades || 0),
-        winRate: this.state.totalTrades > 0 ? 
-          ((perfData?.winningTrades || 0) / this.state.totalTrades) * 100 : 0,
+        winRate:
+          this.state.totalTrades > 0
+            ? ((perfData?.winningTrades || 0) / this.state.totalTrades) * 100
+            : 0,
         maxDrawdown: this.state.maxDrawdown * 100,
-        trades: Array.from(this.state.virtualOrders.values())
-          .filter(order => order.symbol === symbol && order.status === 'FILLED'),
+        trades: Array.from(this.state.virtualOrders.values()).filter(
+          order => order.symbol === symbol && order.status === 'FILLED'
+        ),
         finalBalances: this.state.virtualBalances,
       };
 
@@ -833,19 +834,22 @@ export class PaperTrader extends EventEmitter {
 
     // Send final notification
     if (this.paperConfig.enableNotifications) {
-      const summary = results.reduce((acc, result) => ({
-        totalProfit: acc.totalProfit + result.totalProfit,
-        totalTrades: acc.totalTrades + result.totalTrades,
-        winRate: (acc.winRate + result.winRate) / 2,
-      }), { totalProfit: 0, totalTrades: 0, winRate: 0 });
+      const summary = results.reduce(
+        (acc, result) => ({
+          totalProfit: acc.totalProfit + result.totalProfit,
+          totalTrades: acc.totalTrades + result.totalTrades,
+          winRate: (acc.winRate + result.winRate) / 2,
+        }),
+        { totalProfit: 0, totalTrades: 0, winRate: 0 }
+      );
 
       await this.notificationService.sendNotification(
         `Paper Trading Completed\n` +
-        `Duration: ${(duration / (60 * 60 * 1000)).toFixed(2)} hours\n` +
-        `Total Profit: ${summary.totalProfit.toFixed(2)} ${this.paperConfig.currency}\n` +
-        `Total Trades: ${summary.totalTrades}\n` +
-        `Win Rate: ${summary.winRate.toFixed(2)}%\n` +
-        `Max Drawdown: ${(this.state.maxDrawdown * 100).toFixed(2)}%`,
+          `Duration: ${(duration / (60 * 60 * 1000)).toFixed(2)} hours\n` +
+          `Total Profit: ${summary.totalProfit.toFixed(2)} ${this.paperConfig.currency}\n` +
+          `Total Trades: ${summary.totalTrades}\n` +
+          `Win Rate: ${summary.winRate.toFixed(2)}%\n` +
+          `Max Drawdown: ${(this.state.maxDrawdown * 100).toFixed(2)}%`,
         'success'
       );
     }
@@ -871,8 +875,7 @@ export class PaperTrader extends EventEmitter {
    * Get open orders
    */
   getOpenOrders(): VirtualOrder[] {
-    return Array.from(this.state.virtualOrders.values())
-      .filter(order => order.status === 'NEW');
+    return Array.from(this.state.virtualOrders.values()).filter(order => order.status === 'NEW');
   }
 
   /**
@@ -885,17 +888,21 @@ export class PaperTrader extends EventEmitter {
     winRate: number;
     runtime: number;
   } {
-    const runtime = this.state.isRunning ? 
-      Date.now() - this.state.startTime : 
-      0;
+    const runtime = this.state.isRunning ? Date.now() - this.state.startTime : 0;
 
     return {
       totalTrades: this.state.totalTrades,
       totalProfit: this.state.totalProfit,
       maxDrawdown: this.state.maxDrawdown * 100,
-      winRate: this.state.totalTrades > 0 ? 
-        (Array.from(this.performanceData.values())
-          .reduce((acc, data) => acc + data.winningTrades, 0) / this.state.totalTrades) * 100 : 0,
+      winRate:
+        this.state.totalTrades > 0
+          ? (Array.from(this.performanceData.values()).reduce(
+              (acc, data) => acc + data.winningTrades,
+              0
+            ) /
+              this.state.totalTrades) *
+            100
+          : 0,
       runtime,
     };
   }
@@ -937,5 +944,8 @@ export class PaperTrader extends EventEmitter {
  */
 export interface PaperTrader {
   on<K extends keyof PaperTraderEvents>(event: K, listener: PaperTraderEvents[K]): this;
-  emit<K extends keyof PaperTraderEvents>(event: K, ...args: Parameters<PaperTraderEvents[K]>): boolean;
+  emit<K extends keyof PaperTraderEvents>(
+    event: K,
+    ...args: Parameters<PaperTraderEvents[K]>
+  ): boolean;
 }

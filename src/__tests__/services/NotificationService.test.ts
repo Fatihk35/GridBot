@@ -533,4 +533,254 @@ describe('NotificationService', () => {
       );
     });
   });
+
+  describe('Enhanced Notification Methods', () => {
+    beforeEach(async () => {
+      notificationService = new NotificationService(mockConfig, mockLogger);
+      await new Promise(resolve => setTimeout(resolve, 10)); // Wait for initialization
+      mockTelegramBot.sendMessage.mockResolvedValue({} as any);
+    });
+
+    describe('sendTradeNotification', () => {
+      it('should send trade notification with correct formatting', async () => {
+        const trade = {
+          symbol: 'BTCUSDT',
+          side: 'BUY' as const,
+          price: 50000,
+          quantity: 0.1,
+          mode: 'live' as const,
+        };
+
+        await notificationService.sendTradeNotification(trade);
+
+        expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+          'test-chat-id',
+          expect.stringContaining('[LIVE] 🟢🟢🟢 BUY 0.1 BTCUSDT @ 50000'),
+          expect.objectContaining({
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          })
+        );
+      });
+
+      it('should handle paper trading mode correctly', async () => {
+        const trade = {
+          symbol: 'ETHUSDT',
+          side: 'SELL' as const,
+          price: 3000,
+          quantity: 1,
+          mode: 'papertrade' as const,
+        };
+
+        await notificationService.sendTradeNotification(trade);
+
+        expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+          'test-chat-id',
+          expect.stringContaining('[PAPER] 🔴 SELL 1 ETHUSDT @ 3000'),
+          expect.any(Object)
+        );
+      });
+
+      it('should handle backtest mode correctly', async () => {
+        const trade = {
+          symbol: 'ADAUSDT',
+          side: 'BUY' as const,
+          price: 0.5,
+          quantity: 1000,
+          mode: 'backtest' as const,
+        };
+
+        await notificationService.sendTradeNotification(trade);
+
+        expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+          'test-chat-id',
+          expect.stringContaining('[BACKTEST] 🟢 BUY 1000 ADAUSDT @ 0.5'),
+          expect.any(Object)
+        );
+      });
+    });
+
+    describe('sendStatusNotification with structured data', () => {
+      it('should send structured status notification correctly', async () => {
+        const status = {
+          mode: 'live' as const,
+          balances: { 
+            USDT: 5000,
+            BTC: 0.1 
+          },
+          profit: 125.50,
+          trades: 15,
+        };
+
+        await notificationService.sendStatusNotification(status);
+
+        const sentMessage = mockTelegramBot.sendMessage.mock.calls[0]?.[1] as string;
+        expect(sentMessage).toBeDefined();
+        expect(sentMessage).toContain('[LIVE] Status Update');
+        expect(sentMessage).toContain('📈 Profit: 125.50000000');
+        expect(sentMessage).toContain('💰 Balances: 5000.00000000 USDT, 0.10000000 BTC');
+        expect(sentMessage).toContain('🔄 Trades: 15');
+      });
+
+      it('should handle negative profit correctly', async () => {
+        const status = {
+          mode: 'papertrade' as const,
+          balances: { 
+            USDT: 4875 
+          },
+          profit: -125,
+          trades: 10,
+        };
+
+        await notificationService.sendStatusNotification(status);
+
+        const sentMessage = mockTelegramBot.sendMessage.mock.calls[0]?.[1] as string;
+        expect(sentMessage).toBeDefined();
+        expect(sentMessage).toContain('📉 Profit: -125.00000000');
+      });
+
+      it('should calculate profit percentage correctly', async () => {
+        const status = {
+          mode: 'backtest' as const,
+          balances: { 
+            USDT: 10000 
+          },
+          profit: 500,
+          trades: 20,
+        };
+
+        await notificationService.sendStatusNotification(status);
+
+        // Check that metadata includes profit percentage
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              profitPercentage: '5.00',
+            }),
+          })
+        );
+      });
+    });
+
+    describe('log method', () => {
+      it('should log messages with correct levels', () => {
+        notificationService.log('Debug message', 'DEBUG');
+        notificationService.log('Info message', 'INFO');
+        notificationService.log('Warning message', 'WARNING');
+        notificationService.log('Error message', 'ERROR');
+
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          expect.stringMatching(/\[.*\] \[DEBUG\] Debug message/)
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          expect.stringMatching(/\[.*\] \[INFO\] Info message/)
+        );
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          expect.stringMatching(/\[.*\] \[WARNING\] Warning message/)
+        );
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.stringMatching(/\[.*\] \[ERROR\] Error message/)
+        );
+      });
+
+      it('should default to INFO level', () => {
+        notificationService.log('Default level message');
+
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          expect.stringMatching(/\[.*\] \[INFO\] Default level message/)
+        );
+      });
+
+      it('should respect console output setting', () => {
+        const configWithoutConsole = {
+          ...mockConfig,
+          logging: {
+            ...mockConfig.logging,
+            enableConsoleOutput: false,
+          },
+        };
+
+        const serviceWithoutConsole = new NotificationService(configWithoutConsole, mockLogger);
+        serviceWithoutConsole.log('Should not log');
+
+        // Should not have called logger methods
+        expect(mockLogger.info).not.toHaveBeenCalledWith(
+          expect.stringContaining('Should not log')
+        );
+      });
+    });
+
+    describe('sendPerformanceNotification', () => {
+      it('should send performance notification with good status', async () => {
+        const metrics = {
+          memoryUsage: {
+            rss: 100 * 1024 * 1024, // 100MB
+            heapUsed: 50 * 1024 * 1024, // 50MB
+            heapTotal: 100 * 1024 * 1024, // 100MB
+            external: 0,
+            arrayBuffers: 0,
+          },
+          uptime: 3600, // 1 hour
+          activeConnections: 5,
+          errorRate: 0.01, // 1%
+        };
+
+        await notificationService.sendPerformanceNotification(metrics);
+
+        const sentMessage = mockTelegramBot.sendMessage.mock.calls[0]?.[1] as string;
+        expect(sentMessage).toBeDefined();
+        expect(sentMessage).toContain('📊 Performance Status: 🟢 Good');
+        expect(sentMessage).toContain('⏱️ Uptime: 1.00h');
+        expect(sentMessage).toContain('💾 Memory: 100.00MB');
+        expect(sentMessage).toContain('🔗 Connections: 5');
+        expect(sentMessage).toContain('⚠️ Error Rate: 1.00%');
+      });
+
+      it('should send warning status for moderate issues', async () => {
+        const metrics = {
+          memoryUsage: {
+            rss: 200 * 1024 * 1024,
+            heapUsed: 75 * 1024 * 1024, // 75% of heap
+            heapTotal: 100 * 1024 * 1024,
+            external: 0,
+            arrayBuffers: 0,
+          },
+          uptime: 7200,
+          activeConnections: 10,
+          errorRate: 0.07, // 7%
+        };
+
+        await notificationService.sendPerformanceNotification(metrics);
+
+        const sentMessage = mockTelegramBot.sendMessage.mock.calls[0]?.[1] as string;
+        expect(sentMessage).toBeDefined();
+        expect(sentMessage).toContain('📊 Performance Status: 🟡 Warning');
+      });
+
+      it('should send critical status for severe issues', async () => {
+        const metrics = {
+          memoryUsage: {
+            rss: 300 * 1024 * 1024,
+            heapUsed: 95 * 1024 * 1024, // 95% of heap
+            heapTotal: 100 * 1024 * 1024,
+            external: 0,
+            arrayBuffers: 0,
+          },
+          uptime: 10800,
+          activeConnections: 20,
+          errorRate: 0.15, // 15%
+        };
+
+        await notificationService.sendPerformanceNotification(metrics);
+
+        const sentMessage = mockTelegramBot.sendMessage.mock.calls[0]?.[1] as string;
+        expect(sentMessage).toBeDefined();
+        expect(sentMessage).toContain('📊 Performance Status: 🔴 Critical');
+        
+        // Should be sent as error type
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
+    });
+  });
 });

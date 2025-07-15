@@ -60,7 +60,7 @@ export function calculateEMA(data: CandlestickData[], period: number): number {
   }
 
   const multiplier = 2 / (period + 1);
-  
+
   // Start with SMA for the first EMA value
   const smaValues = data.slice(0, period).map(candle => candle.close);
   let ema = smaValues.reduce((sum, value) => sum + value, 0) / period;
@@ -71,7 +71,7 @@ export function calculateEMA(data: CandlestickData[], period: number): number {
     if (!currentCandle) {
       throw new Error('Invalid candlestick data encountered in EMA calculation');
     }
-    ema = (currentCandle.close * multiplier) + (ema * (1 - multiplier));
+    ema = currentCandle.close * multiplier + ema * (1 - multiplier);
   }
 
   return ema;
@@ -100,28 +100,31 @@ export function calculateSMA(data: CandlestickData[], period: number): number {
  * @returns Bollinger Bands object with upper, middle, and lower bands
  */
 export function calculateBollingerBands(
-  data: CandlestickData[], 
-  period: number = 20, 
+  data: CandlestickData[],
+  period: number = 20,
   standardDeviations: number = 2
 ): { upper: number; middle: number; lower: number } {
   if (data.length < period) {
-    throw new Error(`Insufficient data for Bollinger Bands calculation. Need at least ${period} periods`);
+    throw new Error(
+      `Insufficient data for Bollinger Bands calculation. Need at least ${period} periods`
+    );
   }
 
   const sma = calculateSMA(data, period);
   const recentPrices = data.slice(-period).map(candle => candle.close);
 
   // Calculate standard deviation
-  const variance = recentPrices.reduce((sum, price) => {
-    return sum + Math.pow(price - sma, 2);
-  }, 0) / period;
+  const variance =
+    recentPrices.reduce((sum, price) => {
+      return sum + Math.pow(price - sma, 2);
+    }, 0) / period;
 
   const standardDeviation = Math.sqrt(variance);
 
   return {
-    upper: sma + (standardDeviations * standardDeviation),
+    upper: sma + standardDeviations * standardDeviation,
     middle: sma,
-    lower: sma - (standardDeviations * standardDeviation)
+    lower: sma - standardDeviations * standardDeviation,
   };
 }
 
@@ -143,11 +146,11 @@ export function calculateRSI(data: CandlestickData[], period: number = 14): numb
   for (let i = 1; i < data.length; i++) {
     const current = data[i];
     const previous = data[i - 1];
-    
+
     if (!current || !previous) {
       throw new Error('Invalid candlestick data encountered in RSI calculation');
     }
-    
+
     const change = current.close - previous.close;
     gains.push(change > 0 ? change : 0);
     losses.push(change < 0 ? Math.abs(change) : 0);
@@ -165,7 +168,7 @@ export function calculateRSI(data: CandlestickData[], period: number = 14): numb
   }
 
   const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
+  return 100 - 100 / (1 + rs);
 }
 
 /**
@@ -177,13 +180,15 @@ export function calculateRSI(data: CandlestickData[], period: number = 14): numb
  * @returns MACD object with macd, signal, and histogram values
  */
 export function calculateMACD(
-  data: CandlestickData[], 
-  fastPeriod: number = 12, 
-  slowPeriod: number = 26, 
+  data: CandlestickData[],
+  fastPeriod: number = 12,
+  slowPeriod: number = 26,
   signalPeriod: number = 9
 ): { macd: number; signal: number; histogram: number } {
   if (data.length < slowPeriod + signalPeriod) {
-    throw new Error(`Insufficient data for MACD calculation. Need at least ${slowPeriod + signalPeriod} periods`);
+    throw new Error(
+      `Insufficient data for MACD calculation. Need at least ${slowPeriod + signalPeriod} periods`
+    );
   }
 
   // Calculate EMAs for MACD line
@@ -199,7 +204,7 @@ export function calculateMACD(
   return {
     macd: macdLine,
     signal,
-    histogram
+    histogram,
   };
 }
 
@@ -211,7 +216,9 @@ export function calculateMACD(
  */
 export function calculateVolatility(data: CandlestickData[], period: number): number {
   if (data.length < period + 1) {
-    throw new Error(`Insufficient data for volatility calculation. Need at least ${period + 1} periods`);
+    throw new Error(
+      `Insufficient data for volatility calculation. Need at least ${period + 1} periods`
+    );
   }
 
   const returns: number[] = [];
@@ -220,11 +227,11 @@ export function calculateVolatility(data: CandlestickData[], period: number): nu
   for (let i = 1; i <= period; i++) {
     const currentCandle = data[data.length - i];
     const previousCandle = data[data.length - i - 1];
-    
+
     if (!currentCandle || !previousCandle) {
       throw new Error('Invalid candlestick data encountered in volatility calculation');
     }
-    
+
     const currentPrice = currentCandle.close;
     const previousPrice = previousCandle.close;
     returns.push((currentPrice - previousPrice) / previousPrice);
@@ -232,7 +239,8 @@ export function calculateVolatility(data: CandlestickData[], period: number): nu
 
   // Calculate standard deviation of returns
   const meanReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-  const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - meanReturn, 2), 0) / returns.length;
-  
+  const variance =
+    returns.reduce((sum, ret) => sum + Math.pow(ret - meanReturn, 2), 0) / returns.length;
+
   return Math.sqrt(variance) * 100; // Return as percentage
 }

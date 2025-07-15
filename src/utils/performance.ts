@@ -3,12 +3,12 @@
  * Provides comprehensive financial metrics calculation for trading strategies
  */
 
-import { 
-  BacktestTrade, 
-  PortfolioSnapshot, 
-  SymbolPerformance, 
+import {
+  BacktestTrade,
+  PortfolioSnapshot,
+  SymbolPerformance,
   BacktestResult,
-  PerformanceCalculationOptions
+  PerformanceCalculationOptions,
 } from '@/types/backtest';
 
 /**
@@ -18,7 +18,7 @@ const DEFAULT_PERFORMANCE_OPTIONS: PerformanceCalculationOptions = {
   riskFreeRate: 0.02, // 2% annual risk-free rate
   tradingDaysPerYear: 365, // Crypto markets trade 24/7
   minimumTrades: 10,
-  includeUnrealizedPnL: true
+  includeUnrealizedPnL: true,
 };
 
 /**
@@ -40,21 +40,21 @@ export class PerformanceCalculator {
     portfolioHistory: PortfolioSnapshot[]
   ): SymbolPerformance {
     const symbolTrades = trades.filter(trade => trade.symbol === symbol);
-    
+
     if (symbolTrades.length === 0) {
       return this.createEmptySymbolPerformance(symbol);
     }
 
     const buyTrades = symbolTrades.filter(trade => trade.side === 'BUY');
     const sellTrades = symbolTrades.filter(trade => trade.side === 'SELL');
-    
+
     const profits = sellTrades
       .filter(trade => trade.profit !== undefined)
       .map(trade => trade.profit!);
-    
+
     const winningTrades = profits.filter(profit => profit > 0);
     const losingTrades = profits.filter(profit => profit < 0);
-    
+
     const grossProfit = winningTrades.reduce((sum, profit) => sum + profit, 0);
     const grossLoss = Math.abs(losingTrades.reduce((sum, loss) => sum + loss, 0));
     const netProfit = grossProfit - grossLoss;
@@ -67,14 +67,15 @@ export class PerformanceCalculator {
     const largestWin = winningTrades.length > 0 ? Math.max(...winningTrades) : 0;
     const largestLoss = losingTrades.length > 0 ? Math.abs(Math.min(...losingTrades)) : 0;
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
-    
+
     // Calculate consecutive wins/losses
-    const { maxConsecutiveWins, maxConsecutiveLosses } = this.calculateConsecutiveWinsLosses(profits);
-    
+    const { maxConsecutiveWins, maxConsecutiveLosses } =
+      this.calculateConsecutiveWinsLosses(profits);
+
     // Calculate Sharpe ratio for this symbol
     const returns = this.calculateReturns(symbolTrades);
     const sharpeRatio = this.calculateSharpeRatio(returns);
-    
+
     // Calculate holding period return
     const initialValue = buyTrades.length > 0 ? buyTrades[0]?.value || 0 : 0;
     const holdingPeriodReturn = initialValue > 0 ? (netProfit / initialValue) * 100 : 0;
@@ -102,7 +103,7 @@ export class PerformanceCalculator {
       maxConsecutiveLosses,
       averageTradeSize: symbolTrades.length > 0 ? totalVolume / symbolTrades.length : 0,
       totalVolume,
-      holdingPeriodReturn
+      holdingPeriodReturn,
     };
   }
 
@@ -113,10 +114,19 @@ export class PerformanceCalculator {
     portfolioHistory: PortfolioSnapshot[],
     trades: BacktestTrade[],
     initialBalance: number
-  ): Pick<BacktestResult, 'totalReturn' | 'totalReturnPercentage' | 'annualizedReturn' | 
-                           'maxDrawdown' | 'maxDrawdownPercentage' | 'maxDrawdownDuration' |
-                           'volatility' | 'sharpeRatio' | 'sortinoRatio' | 'calmarRatio'> {
-    
+  ): Pick<
+    BacktestResult,
+    | 'totalReturn'
+    | 'totalReturnPercentage'
+    | 'annualizedReturn'
+    | 'maxDrawdown'
+    | 'maxDrawdownPercentage'
+    | 'maxDrawdownDuration'
+    | 'volatility'
+    | 'sharpeRatio'
+    | 'sortinoRatio'
+    | 'calmarRatio'
+  > {
     if (portfolioHistory.length === 0) {
       return this.createEmptyPerformanceMetrics();
     }
@@ -124,25 +134,30 @@ export class PerformanceCalculator {
     const finalBalance = portfolioHistory[portfolioHistory.length - 1]?.totalValue || 0;
     const totalReturn = finalBalance - initialBalance;
     const totalReturnPercentage = (totalReturn / initialBalance) * 100;
-    
+
     // Calculate time-based metrics
     const startTime = portfolioHistory[0]?.timestamp || 0;
     const endTime = portfolioHistory[portfolioHistory.length - 1]?.timestamp || 0;
-    const durationYears = (endTime - startTime) / (1000 * 60 * 60 * 24 * this.options.tradingDaysPerYear);
-    
-    const annualizedReturn = durationYears > 0 ? 
-      (Math.pow(finalBalance / initialBalance, 1 / durationYears) - 1) * 100 : 0;
+    const durationYears =
+      (endTime - startTime) / (1000 * 60 * 60 * 24 * this.options.tradingDaysPerYear);
+
+    const annualizedReturn =
+      durationYears > 0
+        ? (Math.pow(finalBalance / initialBalance, 1 / durationYears) - 1) * 100
+        : 0;
 
     // Calculate drawdown metrics
     const drawdownMetrics = this.calculateDrawdownMetrics(portfolioHistory);
-    
+
     // Calculate volatility and risk metrics
     const returns = this.calculatePortfolioReturns(portfolioHistory);
     const volatility = this.calculateVolatility(returns) * 100;
     const sharpeRatio = this.calculateSharpeRatio(returns);
     const sortinoRatio = this.calculateSortinoRatio(returns);
-    const calmarRatio = drawdownMetrics.maxDrawdownPercentage > 0 ? 
-      annualizedReturn / drawdownMetrics.maxDrawdownPercentage : 0;
+    const calmarRatio =
+      drawdownMetrics.maxDrawdownPercentage > 0
+        ? annualizedReturn / drawdownMetrics.maxDrawdownPercentage
+        : 0;
 
     return {
       totalReturn,
@@ -154,7 +169,7 @@ export class PerformanceCalculator {
       volatility,
       sharpeRatio,
       sortinoRatio,
-      calmarRatio
+      calmarRatio,
     };
   }
 
@@ -175,22 +190,20 @@ export class PerformanceCalculator {
   } {
     const buyTrades = trades.filter(trade => trade.side === 'BUY');
     const sellTrades = trades.filter(trade => trade.side === 'SELL');
-    
-    const profitableTrades = sellTrades.filter(trade => 
-      trade.profit !== undefined && trade.profit > 0
+
+    const profitableTrades = sellTrades.filter(
+      trade => trade.profit !== undefined && trade.profit > 0
     );
-    const losingTrades = sellTrades.filter(trade => 
-      trade.profit !== undefined && trade.profit < 0
-    );
-    
+    const losingTrades = sellTrades.filter(trade => trade.profit !== undefined && trade.profit < 0);
+
     const totalCommission = trades.reduce((sum, trade) => sum + trade.commission, 0);
     const totalSlippage = trades.reduce((sum, trade) => sum + trade.slippage, 0);
     const totalVolume = trades.reduce((sum, trade) => sum + trade.value, 0);
     const averageTradeSize = trades.length > 0 ? totalVolume / trades.length : 0;
-    
+
     const completedTradePairs = Math.min(buyTrades.length, sellTrades.length);
-    const overallWinRate = completedTradePairs > 0 ? 
-      (profitableTrades.length / completedTradePairs) * 100 : 0;
+    const overallWinRate =
+      completedTradePairs > 0 ? (profitableTrades.length / completedTradePairs) * 100 : 0;
 
     return {
       totalTrades: trades.length,
@@ -202,7 +215,7 @@ export class PerformanceCalculator {
       totalCommission,
       totalSlippage,
       averageTradeSize,
-      totalVolume
+      totalVolume,
     };
   }
 
@@ -233,12 +246,12 @@ export class PerformanceCalculator {
       } else {
         const drawdown = maxValue - snapshot.totalValue;
         const drawdownPercentage = (drawdown / maxValue) * 100;
-        
+
         if (drawdown > maxDrawdown) {
           maxDrawdown = drawdown;
           maxDrawdownPercentage = drawdownPercentage;
         }
-        
+
         if (drawdownStartTime === 0) {
           drawdownStartTime = snapshot.timestamp;
         }
@@ -254,7 +267,7 @@ export class PerformanceCalculator {
     return {
       maxDrawdown,
       maxDrawdownPercentage,
-      maxDrawdownDuration
+      maxDrawdownDuration,
     };
   }
 
@@ -263,17 +276,17 @@ export class PerformanceCalculator {
    */
   private calculatePortfolioReturns(portfolioHistory: PortfolioSnapshot[]): number[] {
     const returns: number[] = [];
-    
+
     for (let i = 1; i < portfolioHistory.length; i++) {
       const previousValue = portfolioHistory[i - 1]?.totalValue || 0;
       const currentValue = portfolioHistory[i]?.totalValue || 0;
-      
+
       if (previousValue > 0) {
         const returnRate = (currentValue - previousValue) / previousValue;
         returns.push(returnRate);
       }
     }
-    
+
     return returns;
   }
 
@@ -282,14 +295,14 @@ export class PerformanceCalculator {
    */
   private calculateReturns(trades: BacktestTrade[]): number[] {
     const returns: number[] = [];
-    
+
     for (const trade of trades) {
       if (trade.profit !== undefined && trade.value > 0) {
         const returnRate = trade.profit / trade.value;
         returns.push(returnRate);
       }
     }
-    
+
     return returns;
   }
 
@@ -298,10 +311,11 @@ export class PerformanceCalculator {
    */
   private calculateVolatility(returns: number[]): number {
     if (returns.length < 2) return 0;
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-    const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+    const variance =
+      returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
+
     return Math.sqrt(variance);
   }
 
@@ -310,15 +324,15 @@ export class PerformanceCalculator {
    */
   private calculateSharpeRatio(returns: number[]): number {
     if (returns.length < this.options.minimumTrades) return 0;
-    
+
     const meanReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const volatility = this.calculateVolatility(returns);
-    
+
     if (volatility === 0) return 0;
-    
+
     // Convert annual risk-free rate to period rate
     const periodRiskFreeRate = this.options.riskFreeRate / this.options.tradingDaysPerYear;
-    
+
     return (meanReturn - periodRiskFreeRate) / volatility;
   }
 
@@ -327,17 +341,17 @@ export class PerformanceCalculator {
    */
   private calculateSortinoRatio(returns: number[]): number {
     if (returns.length < this.options.minimumTrades) return 0;
-    
+
     const meanReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const negativeReturns = returns.filter(ret => ret < 0);
-    
+
     if (negativeReturns.length === 0) return Infinity;
-    
+
     const downsideVolatility = this.calculateVolatility(negativeReturns);
     if (downsideVolatility === 0) return 0;
-    
+
     const periodRiskFreeRate = this.options.riskFreeRate / this.options.tradingDaysPerYear;
-    
+
     return (meanReturn - periodRiskFreeRate) / downsideVolatility;
   }
 
@@ -395,17 +409,26 @@ export class PerformanceCalculator {
       maxConsecutiveLosses: 0,
       averageTradeSize: 0,
       totalVolume: 0,
-      holdingPeriodReturn: 0
+      holdingPeriodReturn: 0,
     };
   }
 
   /**
    * Create empty performance metrics
    */
-  private createEmptyPerformanceMetrics(): Pick<BacktestResult, 'totalReturn' | 'totalReturnPercentage' | 
-                                                              'annualizedReturn' | 'maxDrawdown' | 'maxDrawdownPercentage' | 
-                                                              'maxDrawdownDuration' | 'volatility' | 'sharpeRatio' | 
-                                                              'sortinoRatio' | 'calmarRatio'> {
+  private createEmptyPerformanceMetrics(): Pick<
+    BacktestResult,
+    | 'totalReturn'
+    | 'totalReturnPercentage'
+    | 'annualizedReturn'
+    | 'maxDrawdown'
+    | 'maxDrawdownPercentage'
+    | 'maxDrawdownDuration'
+    | 'volatility'
+    | 'sharpeRatio'
+    | 'sortinoRatio'
+    | 'calmarRatio'
+  > {
     return {
       totalReturn: 0,
       totalReturnPercentage: 0,
@@ -416,7 +439,7 @@ export class PerformanceCalculator {
       volatility: 0,
       sharpeRatio: 0,
       sortinoRatio: 0,
-      calmarRatio: 0
+      calmarRatio: 0,
     };
   }
 }
@@ -430,24 +453,25 @@ export class PerformanceUtils {
    */
   static calculateVaR(returns: number[], confidenceLevel: number = 0.95): number {
     if (returns.length === 0) return 0;
-    
+
     const sortedReturns = [...returns].sort((a, b) => a - b);
     const index = Math.floor((1 - confidenceLevel) * sortedReturns.length);
-    
+
     return sortedReturns[index] || 0;
   }
 
   /**
-   * Calculate Conditional Value at Risk (CVaR) 
+   * Calculate Conditional Value at Risk (CVaR)
    */
   static calculateCVaR(returns: number[], confidenceLevel: number = 0.95): number {
     if (returns.length === 0) return 0;
-    
+
     const valueAtRisk = PerformanceUtils.calculateVaR(returns, confidenceLevel);
     const tailReturns = returns.filter(ret => ret <= valueAtRisk);
-    
-    return tailReturns.length > 0 ? 
-      tailReturns.reduce((sum, ret) => sum + ret, 0) / tailReturns.length : 0;
+
+    return tailReturns.length > 0
+      ? tailReturns.reduce((sum, ret) => sum + ret, 0) / tailReturns.length
+      : 0;
   }
 
   /**
@@ -461,18 +485,18 @@ export class PerformanceUtils {
   } {
     // This would require tick-by-tick data to calculate properly
     // For now, return simplified metrics based on profit/loss
-    const profits = trades
-      .filter(trade => trade.profit !== undefined)
-      .map(trade => trade.profit!);
-    
+    const profits = trades.filter(trade => trade.profit !== undefined).map(trade => trade.profit!);
+
     const positive = profits.filter(p => p > 0);
     const negative = profits.filter(p => p < 0).map(p => Math.abs(p));
-    
+
     return {
-      averageMFE: positive.length > 0 ? positive.reduce((sum, p) => sum + p, 0) / positive.length : 0,
-      averageMAE: negative.length > 0 ? negative.reduce((sum, p) => sum + p, 0) / negative.length : 0,
+      averageMFE:
+        positive.length > 0 ? positive.reduce((sum, p) => sum + p, 0) / positive.length : 0,
+      averageMAE:
+        negative.length > 0 ? negative.reduce((sum, p) => sum + p, 0) / negative.length : 0,
       maxMFE: positive.length > 0 ? Math.max(...positive) : 0,
-      maxMAE: negative.length > 0 ? Math.max(...negative) : 0
+      maxMAE: negative.length > 0 ? Math.max(...negative) : 0,
     };
   }
 
@@ -487,14 +511,14 @@ export class PerformanceUtils {
    * Calculate profit factor by time period
    */
   static calculateProfitFactorByPeriod(
-    trades: BacktestTrade[], 
+    trades: BacktestTrade[],
     periodMs: number
   ): Array<{ period: string; profitFactor: number; trades: number }> {
     if (trades.length === 0) return [];
-    
+
     // Group trades by time period
     const periods = new Map<number, BacktestTrade[]>();
-    
+
     for (const trade of trades) {
       const periodKey = Math.floor(trade.timestamp / periodMs) * periodMs;
       if (!periods.has(periodKey)) {
@@ -502,26 +526,26 @@ export class PerformanceUtils {
       }
       periods.get(periodKey)!.push(trade);
     }
-    
+
     // Calculate profit factor for each period
     const results: Array<{ period: string; profitFactor: number; trades: number }> = [];
-    
+
     for (const [periodKey, periodTrades] of periods) {
       const profits = periodTrades
         .filter(trade => trade.profit !== undefined)
         .map(trade => trade.profit!);
-      
+
       const grossProfit = profits.filter(p => p > 0).reduce((sum, p) => sum + p, 0);
       const grossLoss = Math.abs(profits.filter(p => p < 0).reduce((sum, p) => sum + p, 0));
       const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
-      
+
       results.push({
         period: new Date(periodKey).toISOString(),
         profitFactor,
-        trades: periodTrades.length
+        trades: periodTrades.length,
       });
     }
-    
+
     return results.sort((a, b) => a.period.localeCompare(b.period));
   }
 }

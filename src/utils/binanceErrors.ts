@@ -22,7 +22,7 @@ export const BINANCE_ERROR_CODES = {
   UNSUPPORTED_OPERATION: -1020,
   INVALID_TIMESTAMP: -1021,
   INVALID_SIGNATURE: -1022,
-  
+
   // Order errors
   ILLEGAL_CHARS: -1100,
   TOO_MANY_PARAMETERS: -1101,
@@ -44,7 +44,7 @@ export const BINANCE_ERROR_CODES = {
   MORE_THAN_XX_HOURS: -1127,
   OPTIONAL_PARAMS_BAD_COMBO: -1128,
   INVALID_PARAMETER: -1130,
-  
+
   // Trading errors
   NEW_ORDER_REJECTED: -2010,
   CANCEL_REJECTED: -2011,
@@ -52,10 +52,10 @@ export const BINANCE_ERROR_CODES = {
   BAD_API_KEY_FMT: -2014,
   REJECTED_MBX_KEY: -2015,
   NO_TRADING_SYMBOL: -2016,
-  
+
   // Account errors
   INSUFFICIENT_BALANCE: -2019,
-  
+
   // Filter failures
   PRICE_FILTER: -1013,
   LOT_SIZE: -1013,
@@ -63,10 +63,10 @@ export const BINANCE_ERROR_CODES = {
   PERCENT_PRICE: -1013,
   MARKET_LOT_SIZE: -1013,
   MAX_NUM_ORDERS: -1013,
-  MAX_ALGO_ORDERS: -1013
+  MAX_ALGO_ORDERS: -1013,
 } as const;
 
-type BinanceErrorCode = typeof BINANCE_ERROR_CODES[keyof typeof BINANCE_ERROR_CODES];
+type BinanceErrorCode = (typeof BINANCE_ERROR_CODES)[keyof typeof BINANCE_ERROR_CODES];
 
 /**
  * Binance API error class
@@ -76,12 +76,7 @@ export class BinanceApiError extends BaseError {
   public readonly binanceCode: number;
   public readonly binanceMessage: string;
 
-  constructor(
-    message: string,
-    binanceCode: number,
-    binanceMessage: string,
-    cause?: Error
-  ) {
+  constructor(message: string, binanceCode: number, binanceMessage: string, cause?: Error) {
     super(message, `BINANCE_API_ERROR_${binanceCode}`, cause);
     this.binanceCode = binanceCode;
     this.binanceMessage = binanceMessage;
@@ -95,7 +90,7 @@ export class BinanceApiError extends BaseError {
   static fromBinanceError(error: BinanceError, context?: string): BinanceApiError {
     const contextMessage = context ? `${context}: ` : '';
     const message = `${contextMessage}${error.msg} (Code: ${error.code})`;
-    
+
     return new BinanceApiError(message, error.code, error.msg);
   }
 
@@ -107,9 +102,9 @@ export class BinanceApiError extends BaseError {
       BINANCE_ERROR_CODES.TOO_MANY_REQUESTS,
       BINANCE_ERROR_CODES.TIMEOUT,
       BINANCE_ERROR_CODES.SERVICE_SHUTTING_DOWN,
-      BINANCE_ERROR_CODES.DISCONNECTED
+      BINANCE_ERROR_CODES.DISCONNECTED,
     ];
-    
+
     return retryableCodes.includes(this.binanceCode as BinanceErrorCode);
   }
 
@@ -136,9 +131,9 @@ export class BinanceApiError extends BaseError {
       BINANCE_ERROR_CODES.INVALID_TIMESTAMP,
       BINANCE_ERROR_CODES.INVALID_SIGNATURE,
       BINANCE_ERROR_CODES.BAD_API_KEY_FMT,
-      BINANCE_ERROR_CODES.REJECTED_MBX_KEY
+      BINANCE_ERROR_CODES.REJECTED_MBX_KEY,
     ];
-    
+
     return authCodes.includes(this.binanceCode as BinanceErrorCode);
   }
 
@@ -155,9 +150,9 @@ export class BinanceApiError extends BaseError {
       BINANCE_ERROR_CODES.BAD_SYMBOL,
       BINANCE_ERROR_CODES.PRICE_FILTER,
       BINANCE_ERROR_CODES.LOT_SIZE,
-      BINANCE_ERROR_CODES.MIN_NOTIONAL
+      BINANCE_ERROR_CODES.MIN_NOTIONAL,
     ];
-    
+
     return orderParamCodes.includes(this.binanceCode as BinanceErrorCode);
   }
 }
@@ -168,11 +163,7 @@ export class BinanceApiError extends BaseError {
 export class BinanceRateLimitError extends BinanceApiError {
   public readonly retryAfter?: number | undefined;
 
-  constructor(
-    message: string,
-    retryAfter?: number,
-    cause?: Error
-  ) {
+  constructor(message: string, retryAfter?: number, cause?: Error) {
     super(message, BINANCE_ERROR_CODES.TOO_MANY_REQUESTS, 'Rate limit exceeded', cause);
     this.retryAfter = retryAfter;
     this.name = 'BinanceRateLimitError';
@@ -196,12 +187,7 @@ export class BinanceOrderValidationError extends BaseError {
   public readonly symbol: string;
   public readonly orderParams: any;
 
-  constructor(
-    message: string,
-    symbol: string,
-    orderParams: any,
-    cause?: Error
-  ) {
+  constructor(message: string, symbol: string, orderParams: any, cause?: Error) {
     super(message, 'BINANCE_ORDER_VALIDATION_ERROR', cause);
     this.symbol = symbol;
     this.orderParams = orderParams;

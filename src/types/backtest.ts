@@ -7,19 +7,37 @@ import { z } from 'zod';
 /**
  * Schema for backtesting configuration
  */
-export const BacktestConfigSchema = z.object({
-  startTime: z.number().int().positive(),
-  endTime: z.number().int().positive(),
-  symbols: z.array(z.string()).min(1),
-  interval: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']),
-  initialBalance: z.number().positive(),
-  slippagePercentage: z.number().min(0).max(1).default(0.001), // 0.1% default slippage
-  enableDetailedLogging: z.boolean().default(true),
-  saveHistoricalData: z.boolean().default(true),
-  maxConcurrentSymbols: z.number().int().positive().default(5)
-}).refine(data => data.endTime > data.startTime, {
-  message: "End time must be after start time"
-});
+export const BacktestConfigSchema = z
+  .object({
+    startTime: z.number().int().positive(),
+    endTime: z.number().int().positive(),
+    symbols: z.array(z.string()).min(1),
+    interval: z.enum([
+      '1m',
+      '3m',
+      '5m',
+      '15m',
+      '30m',
+      '1h',
+      '2h',
+      '4h',
+      '6h',
+      '8h',
+      '12h',
+      '1d',
+      '3d',
+      '1w',
+      '1M',
+    ]),
+    initialBalance: z.number().positive(),
+    slippagePercentage: z.number().min(0).max(1).default(0.001), // 0.1% default slippage
+    enableDetailedLogging: z.boolean().default(true),
+    saveHistoricalData: z.boolean().default(true),
+    maxConcurrentSymbols: z.number().int().positive().default(5),
+  })
+  .refine(data => data.endTime > data.startTime, {
+    message: 'End time must be after start time',
+  });
 
 export type BacktestConfig = z.infer<typeof BacktestConfigSchema>;
 
@@ -95,14 +113,14 @@ export interface BacktestResult {
   startTime: number;
   endTime: number;
   duration: number; // Duration in milliseconds
-  
+
   // Portfolio metrics
   initialBalance: number;
   finalBalance: number;
   totalReturn: number;
   totalReturnPercentage: number;
   annualizedReturn: number;
-  
+
   // Risk metrics
   maxDrawdown: number;
   maxDrawdownPercentage: number;
@@ -111,7 +129,7 @@ export interface BacktestResult {
   sharpeRatio: number;
   sortinoRatio: number;
   calmarRatio: number;
-  
+
   // Trading metrics
   totalTrades: number;
   totalBuyTrades: number;
@@ -123,19 +141,19 @@ export interface BacktestResult {
   totalSlippage: number;
   averageTradeSize: number;
   totalVolume: number;
-  
+
   // Performance by symbol
   symbolPerformance: Map<string, SymbolPerformance>;
-  
+
   // Time series data
   portfolioHistory: PortfolioSnapshot[];
   trades: BacktestTrade[];
-  
+
   // Execution metrics
   executionTimeMs: number;
   dataPointsProcessed: number;
   errorsEncountered: string[];
-  
+
   // Additional metadata
   createdAt: number;
   version: string;
@@ -279,7 +297,7 @@ export const BacktestTradeSchema = z.object({
   gridLevel: z.number(),
   executionPrice: z.number().positive(),
   slippage: z.number().min(0),
-  candleTime: z.number().int().positive()
+  candleTime: z.number().int().positive(),
 });
 
 /**
@@ -293,7 +311,7 @@ export const PortfolioSnapshotSchema = z.object({
   unrealizedPnL: z.number(),
   realizedPnL: z.number(),
   drawdown: z.number().min(0),
-  drawdownPercentage: z.number().min(0).max(1)
+  drawdownPercentage: z.number().min(0).max(1),
 });
 
 /**

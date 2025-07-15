@@ -26,14 +26,18 @@ export class ConfigLoader {
     try {
       const data = await fs.readFile(this.configFilePath, 'utf8');
       const config = JSON.parse(data);
-      
+
       // Apply environment overrides
       const configWithEnv = this.applyEnvironmentOverrides(config);
-      
+
       // Validate
       return ConfigValidator.validateConfig(configWithEnv);
     } catch (error) {
-      throw new ConfigError(`Failed to load configuration: ${String(error)}`, undefined, error instanceof Error ? error : undefined);
+      throw new ConfigError(
+        `Failed to load configuration: ${String(error)}`,
+        undefined,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -75,7 +79,11 @@ export class ConfigLoader {
       await fs.mkdir(path.dirname(this.configFilePath), { recursive: true });
       await fs.writeFile(this.configFilePath, JSON.stringify(config, null, 2));
     } catch (error) {
-      throw new ConfigError(`Failed to save configuration: ${String(error)}`, undefined, error instanceof Error ? error : undefined);
+      throw new ConfigError(
+        `Failed to save configuration: ${String(error)}`,
+        undefined,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 

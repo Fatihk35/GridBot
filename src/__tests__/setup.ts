@@ -39,7 +39,7 @@ declare global {
 // Custom Jest matchers
 expect.extend({
   toBeValidConfig(received) {
-    const pass = 
+    const pass =
       typeof received === 'object' &&
       received !== null &&
       'tradeMode' in received &&

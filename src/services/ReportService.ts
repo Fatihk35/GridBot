@@ -8,15 +8,15 @@ import path from 'path';
 import { z } from 'zod';
 
 import { Logger } from '@/utils/logger';
-import { 
-  BacktestResult, 
-  BacktestTrade, 
+import {
+  BacktestResult,
+  BacktestTrade,
   PortfolioSnapshot,
   ReportOptions,
   SymbolPerformance,
   MarketDataStats,
   BacktestTradeSchema,
-  PortfolioSnapshotSchema
+  PortfolioSnapshotSchema,
 } from '@/types/backtest';
 
 /**
@@ -24,13 +24,19 @@ import {
  */
 const TransactionLogSchema = z.object({
   time: z.number().int().positive(),
-  type: z.enum(['ORDER_CREATED', 'ORDER_FILLED', 'ORDER_CANCELED', 'POSITION_OPENED', 'POSITION_CLOSED']),
+  type: z.enum([
+    'ORDER_CREATED',
+    'ORDER_FILLED',
+    'ORDER_CANCELED',
+    'POSITION_OPENED',
+    'POSITION_CLOSED',
+  ]),
   symbol: z.string(),
   side: z.enum(['BUY', 'SELL']).optional(),
   price: z.number().positive().optional(),
   quantity: z.number().positive().optional(),
   orderId: z.string().optional(),
-  metadata: z.record(z.unknown()).optional()
+  metadata: z.record(z.unknown()).optional(),
 });
 
 type TransactionLogEntry = z.infer<typeof TransactionLogSchema>;
@@ -42,19 +48,25 @@ const StatusReportSchema = z.object({
   time: z.number().int().positive(),
   mode: z.enum(['backtest', 'papertrade', 'live']),
   balances: z.record(z.string(), z.number()),
-  openOrders: z.array(z.object({
-    id: z.string(),
-    symbol: z.string(),
-    side: z.enum(['BUY', 'SELL']),
-    price: z.number(),
-    quantity: z.number(),
-    status: z.string()
-  })).optional(),
-  performance: z.object({
-    totalReturn: z.number(),
-    drawdown: z.number(),
-    trades: z.number()
-  }).optional()
+  openOrders: z
+    .array(
+      z.object({
+        id: z.string(),
+        symbol: z.string(),
+        side: z.enum(['BUY', 'SELL']),
+        price: z.number(),
+        quantity: z.number(),
+        status: z.string(),
+      })
+    )
+    .optional(),
+  performance: z
+    .object({
+      totalReturn: z.number(),
+      drawdown: z.number(),
+      trades: z.number(),
+    })
+    .optional(),
 });
 
 type StatusReport = z.infer<typeof StatusReportSchema>;
@@ -75,7 +87,7 @@ export class ReportService {
    * Save comprehensive backtest report
    */
   async saveBacktestReport(
-    result: BacktestResult, 
+    result: BacktestResult,
     options: Partial<ReportOptions> = {}
   ): Promise<string> {
     try {
@@ -85,7 +97,7 @@ export class ReportService {
         includeTrades: true,
         includePortfolioHistory: true,
         includeSymbolBreakdown: true,
-        ...options
+        ...options,
       };
 
       // Ensure report directory exists
@@ -94,7 +106,7 @@ export class ReportService {
 
       const timestamp = new Date(result.createdAt).toISOString().replace(/[:.]/g, '-');
       const baseFileName = `backtest_${result.id}_${timestamp}`;
-      
+
       let filePath: string;
 
       switch (reportOptions.format) {
@@ -113,7 +125,6 @@ export class ReportService {
 
       this.logger.info(`Backtest report saved: ${filePath}`);
       return filePath;
-
     } catch (error) {
       this.logger.error('Failed to save backtest report:', error);
       throw error;
@@ -129,10 +140,10 @@ export class ReportService {
     options: ReportOptions
   ): Promise<string> {
     const filePath = path.join(this.reportDirectory, 'backtests', `${baseFileName}.json`);
-    
+
     // Create report object based on options
     const reportData = this.createReportData(result, options);
-    
+
     await fs.writeFile(filePath, JSON.stringify(reportData, null, 2), 'utf8');
     return filePath;
   }
@@ -182,10 +193,10 @@ export class ReportService {
     options: ReportOptions
   ): Promise<string> {
     const filePath = path.join(this.reportDirectory, 'backtests', `${baseFileName}.html`);
-    
+
     const htmlContent = this.generateHtmlReport(result, options);
     await fs.writeFile(filePath, htmlContent, 'utf8');
-    
+
     return filePath;
   }
 
@@ -205,7 +216,6 @@ export class ReportService {
 
       const logLine = JSON.stringify(entry) + '\n';
       await fs.appendFile(logFile, logLine, 'utf8');
-
     } catch (error) {
       this.logger.error('Failed to log transaction:', error);
       throw error;
@@ -228,7 +238,6 @@ export class ReportService {
       const filePath = path.join(statusDir, fileName);
 
       await fs.writeFile(filePath, JSON.stringify(report, null, 2), 'utf8');
-
     } catch (error) {
       this.logger.error('Failed to save status report:', error);
       throw error;
@@ -249,7 +258,6 @@ export class ReportService {
 
       await fs.writeFile(filePath, JSON.stringify(report, null, 2), 'utf8');
       this.logger.info(`Final report saved: ${filePath}`);
-
     } catch (error) {
       this.logger.error('Failed to save final report:', error);
       throw error;
@@ -268,7 +276,7 @@ export class ReportService {
         config: result.config,
         executionTimeMs: result.executionTimeMs,
         dataPointsProcessed: result.dataPointsProcessed,
-        errorsEncountered: result.errorsEncountered
+        errorsEncountered: result.errorsEncountered,
       },
       summary: {
         startTime: result.startTime,
@@ -289,8 +297,8 @@ export class ReportService {
         totalTrades: result.totalTrades,
         overallWinRate: result.overallWinRate,
         totalCommission: result.totalCommission,
-        totalSlippage: result.totalSlippage
-      }
+        totalSlippage: result.totalSlippage,
+      },
     };
 
     if (options.includeSymbolBreakdown) {
@@ -312,20 +320,34 @@ export class ReportService {
    * Save summary information as CSV
    */
   private async saveSummaryCsv(result: BacktestResult, filePath: string): Promise<void> {
-    const headers = [
-      'Metric', 'Value', 'Unit'
-    ];
+    const headers = ['Metric', 'Value', 'Unit'];
 
     const rows = [
       ['Start Time', new Date(result.startTime).toISOString(), 'timestamp'],
       ['End Time', new Date(result.endTime).toISOString(), 'timestamp'],
       ['Duration', (result.duration / (1000 * 60 * 60 * 24)).toFixed(2), 'days'],
-      ['Initial Balance', result.initialBalance.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT'],
-      ['Final Balance', result.finalBalance.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT'],
-      ['Total Return', result.totalReturn.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT'],
+      [
+        'Initial Balance',
+        result.initialBalance.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
+      [
+        'Final Balance',
+        result.finalBalance.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
+      [
+        'Total Return',
+        result.totalReturn.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
       ['Total Return %', result.totalReturnPercentage.toFixed(2), '%'],
       ['Annualized Return %', result.annualizedReturn.toFixed(2), '%'],
-      ['Max Drawdown', result.maxDrawdown.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT'],
+      [
+        'Max Drawdown',
+        result.maxDrawdown.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
       ['Max Drawdown %', result.maxDrawdownPercentage.toFixed(2), '%'],
       ['Volatility %', result.volatility.toFixed(2), '%'],
       ['Sharpe Ratio', result.sharpeRatio.toFixed(4), 'ratio'],
@@ -333,8 +355,16 @@ export class ReportService {
       ['Calmar Ratio', result.calmarRatio.toFixed(4), 'ratio'],
       ['Total Trades', result.totalTrades.toString(), 'count'],
       ['Win Rate %', result.overallWinRate.toFixed(2), '%'],
-      ['Total Commission', result.totalCommission.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT'],
-      ['Total Slippage', result.totalSlippage.toFixed(8), result.config.symbols[0]?.split('/')[1] || 'USDT']
+      [
+        'Total Commission',
+        result.totalCommission.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
+      [
+        'Total Slippage',
+        result.totalSlippage.toFixed(8),
+        result.config.symbols[0]?.split('/')[1] || 'USDT',
+      ],
     ];
 
     const csvContent = [headers, ...rows]
@@ -351,8 +381,20 @@ export class ReportService {
     if (trades.length === 0) return;
 
     const headers = [
-      'ID', 'Timestamp', 'Date', 'Symbol', 'Side', 'Type', 'Price', 'Quantity', 
-      'Value', 'Commission', 'Profit', 'Grid Level', 'Execution Price', 'Slippage'
+      'ID',
+      'Timestamp',
+      'Date',
+      'Symbol',
+      'Side',
+      'Type',
+      'Price',
+      'Quantity',
+      'Value',
+      'Commission',
+      'Profit',
+      'Grid Level',
+      'Execution Price',
+      'Slippage',
     ];
 
     const rows = trades.map(trade => [
@@ -369,7 +411,7 @@ export class ReportService {
       trade.profit?.toFixed(8) || '',
       trade.gridLevel.toFixed(8),
       trade.executionPrice.toFixed(8),
-      trade.slippage.toFixed(8)
+      trade.slippage.toFixed(8),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -383,7 +425,7 @@ export class ReportService {
    * Save portfolio history as CSV
    */
   private async savePortfolioHistoryCsv(
-    portfolioHistory: PortfolioSnapshot[], 
+    portfolioHistory: PortfolioSnapshot[],
     filePath: string
   ): Promise<void> {
     if (portfolioHistory.length === 0) return;
@@ -397,8 +439,15 @@ export class ReportService {
     });
 
     const headers = [
-      'Timestamp', 'Date', 'Total Value', 'Quote Balance', 'Unrealized PnL', 
-      'Realized PnL', 'Drawdown', 'Drawdown %', ...Array.from(allBaseCurrencies)
+      'Timestamp',
+      'Date',
+      'Total Value',
+      'Quote Balance',
+      'Unrealized PnL',
+      'Realized PnL',
+      'Drawdown',
+      'Drawdown %',
+      ...Array.from(allBaseCurrencies),
     ];
 
     const rows = portfolioHistory.map(snapshot => [
@@ -410,9 +459,9 @@ export class ReportService {
       snapshot.realizedPnL.toFixed(8),
       snapshot.drawdown.toFixed(8),
       (snapshot.drawdownPercentage * 100).toFixed(2),
-      ...Array.from(allBaseCurrencies).map(currency => 
+      ...Array.from(allBaseCurrencies).map(currency =>
         (snapshot.baseBalances[currency] || 0).toFixed(8)
-      )
+      ),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -426,18 +475,35 @@ export class ReportService {
    * Save symbol performance as CSV
    */
   private async saveSymbolPerformanceCsv(
-    symbolPerformance: Map<string, SymbolPerformance>, 
+    symbolPerformance: Map<string, SymbolPerformance>,
     filePath: string
   ): Promise<void> {
     if (symbolPerformance.size === 0) return;
 
     const headers = [
-      'Symbol', 'Total Trades', 'Buy Trades', 'Sell Trades', 'Winning Trades', 
-      'Losing Trades', 'Win Rate %', 'Gross Profit', 'Gross Loss', 'Net Profit',
-      'Net Profit %', 'Total Commission', 'Average Win', 'Average Loss', 
-      'Largest Win', 'Largest Loss', 'Profit Factor', 'Sharpe Ratio',
-      'Max Consecutive Wins', 'Max Consecutive Losses', 'Average Trade Size',
-      'Total Volume', 'Holding Period Return %'
+      'Symbol',
+      'Total Trades',
+      'Buy Trades',
+      'Sell Trades',
+      'Winning Trades',
+      'Losing Trades',
+      'Win Rate %',
+      'Gross Profit',
+      'Gross Loss',
+      'Net Profit',
+      'Net Profit %',
+      'Total Commission',
+      'Average Win',
+      'Average Loss',
+      'Largest Win',
+      'Largest Loss',
+      'Profit Factor',
+      'Sharpe Ratio',
+      'Max Consecutive Wins',
+      'Max Consecutive Losses',
+      'Average Trade Size',
+      'Total Volume',
+      'Holding Period Return %',
     ];
 
     const rows = Array.from(symbolPerformance.values()).map(perf => [
@@ -463,7 +529,7 @@ export class ReportService {
       perf.maxConsecutiveLosses.toString(),
       perf.averageTradeSize.toFixed(8),
       perf.totalVolume.toFixed(8),
-      perf.holdingPeriodReturn.toFixed(2)
+      perf.holdingPeriodReturn.toFixed(2),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -478,9 +544,10 @@ export class ReportService {
    */
   private generateHtmlReport(result: BacktestResult, options: ReportOptions): string {
     const symbolCount = result.symbolPerformance.size;
-    const bestSymbol = Array.from(result.symbolPerformance.values())
-      .reduce((best, current) => current.netProfit > best.netProfit ? current : best);
-    
+    const bestSymbol = Array.from(result.symbolPerformance.values()).reduce((best, current) =>
+      current.netProfit > best.netProfit ? current : best
+    );
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -578,7 +645,9 @@ export class ReportService {
             </div>
         </div>
 
-        ${options.includeSymbolBreakdown && symbolCount > 0 ? `
+        ${
+          options.includeSymbolBreakdown && symbolCount > 0
+            ? `
         <div class="section">
             <div class="section-title">Symbol Performance</div>
             <table>
@@ -595,7 +664,9 @@ export class ReportService {
                     </tr>
                 </thead>
                 <tbody>
-                    ${Array.from(result.symbolPerformance.values()).map(perf => `
+                    ${Array.from(result.symbolPerformance.values())
+                      .map(
+                        perf => `
                     <tr>
                         <td><strong>${perf.symbol}</strong></td>
                         <td>${perf.totalTrades}</td>
@@ -606,11 +677,15 @@ export class ReportService {
                         <td class="negative">${perf.largestLoss.toFixed(8)}</td>
                         <td>${perf.profitFactor === Infinity ? '∞' : perf.profitFactor.toFixed(2)}</td>
                     </tr>
-                    `).join('')}
+                    `
+                      )
+                      .join('')}
                 </tbody>
             </table>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
         <div class="section">
             <div class="section-title">Execution Details</div>
@@ -626,14 +701,18 @@ export class ReportService {
                 <span class="config-label">Errors Encountered:</span>
                 ${result.errorsEncountered.length}
             </div>
-            ${result.errorsEncountered.length > 0 ? `
+            ${
+              result.errorsEncountered.length > 0
+                ? `
             <div class="config-item">
                 <span class="config-label">Error Details:</span>
                 <ul>
                     ${result.errorsEncountered.map(error => `<li>${error}</li>`).join('')}
                 </ul>
             </div>
-            ` : ''}
+            `
+                : ''
+            }
         </div>
     </div>
 </body>
@@ -658,18 +737,20 @@ export class ReportService {
   async getBacktestReports(): Promise<Array<{ id: string; date: string; path: string }>> {
     try {
       const backtestDir = path.join(this.reportDirectory, 'backtests');
-      
+
       try {
         const files = await fs.readdir(backtestDir);
         const reports = files
           .filter(file => file.endsWith('.json'))
           .map(file => {
-            const match = file.match(/backtest_(.+)_(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.json/);
+            const match = file.match(
+              /backtest_(.+)_(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.json/
+            );
             if (match && match[1] && match[2]) {
               return {
                 id: match[1],
                 date: match[2].replace(/-/g, ':').replace('T', 'T').replace('Z', 'Z'),
-                path: path.join(backtestDir, file)
+                path: path.join(backtestDir, file),
               };
             }
             return null;

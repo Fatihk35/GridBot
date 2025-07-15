@@ -17,7 +17,7 @@ import {
   BinanceWebSocketError,
   BinanceOrderValidationError,
   BinanceSymbolFilterError,
-  BINANCE_ERROR_CODES
+  BINANCE_ERROR_CODES,
 } from '@/utils/binanceErrors';
 
 import {
@@ -40,7 +40,7 @@ import {
   QueryOrderParams,
   CancelOrderParams,
   GetKlinesParams,
-  BinanceKlineSchema
+  BinanceKlineSchema,
 } from '@/types/binance';
 
 /**
@@ -79,12 +79,12 @@ export class BinanceService {
   private readonly client: Spot;
   private readonly logger: Logger;
   private readonly rateLimiter: RateLimiter;
-  
+
   // Exchange information cache
   private exchangeInfo: BinanceExchangeInfo | null = null;
   private symbolInfoCache: Map<string, BinanceSymbolInfo> = new Map();
   private lastExchangeInfoUpdate: number = 0;
-  
+
   // WebSocket management
   private wsSubscriptions: Map<string, WebSocketSubscription> = new Map();
   private wsReconnectAttempts: Map<string, number> = new Map();
@@ -103,28 +103,22 @@ export class BinanceService {
       testnet: config.binanceSettings.testnet,
       recvWindow: 5000,
       timeout: 60000,
-      maxRetries: 3
+      maxRetries: 3,
     };
 
     // Initialize Binance client
-    this.client = new Spot(
-      this.config.apiKey,
-      this.config.secretKey,
-      {
-        baseURL: this.config.testnet 
-          ? 'https://testnet.binance.vision' 
-          : 'https://api.binance.com',
-        timeout: this.config.timeout!,
-        recvWindow: this.config.recvWindow!
-      }
-    );
+    this.client = new Spot(this.config.apiKey, this.config.secretKey, {
+      baseURL: this.config.testnet ? 'https://testnet.binance.vision' : 'https://api.binance.com',
+      timeout: this.config.timeout!,
+      recvWindow: this.config.recvWindow!,
+    });
 
     this.logger = Logger.getInstance();
     this.rateLimiter = new RateLimiter();
 
     this.logger.info('BinanceService initialized', {
       testnet: this.config.testnet,
-      recvWindow: this.config.recvWindow
+      recvWindow: this.config.recvWindow,
     });
   }
 
@@ -146,33 +140,29 @@ export class BinanceService {
    */
   public async getHistoricalKlines(params: GetKlinesParams): Promise<BinanceKline[]> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         const requestParams: any = {
-          limit: params.limit || 1000
+          limit: params.limit || 1000,
         };
-        
+
         if (params.startTime !== undefined) {
           requestParams.startTime = params.startTime;
         }
-        
+
         if (params.endTime !== undefined) {
           requestParams.endTime = params.endTime;
         }
-        
-        return await this.client.klines(
-          params.symbol,
-          params.interval,
-          requestParams
-        );
+
+        return await this.client.klines(params.symbol, params.interval, requestParams);
       });
 
       this.rateLimiter.recordRequest('general');
 
       // Validate and transform response
       const rawKlines = z.array(BinanceKlineSchema).parse(response.data);
-      
+
       return rawKlines.map(this.transformKlineData);
     } catch (error) {
       const binanceError = this.handleBinanceError(error, 'getHistoricalKlines');
@@ -185,7 +175,7 @@ export class BinanceService {
    */
   public async getAccountInfo(): Promise<BinanceAccountInfo> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         return await this.client.account();
@@ -205,38 +195,34 @@ export class BinanceService {
   public async createOrder(params: CreateOrderParams): Promise<BinanceOrderResponse> {
     // Validate order parameters against symbol filters
     await this.validateOrderParameters(params);
-    
+
     await this.rateLimiter.waitForRateLimit('order');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         const orderParams: any = {
-          newOrderRespType: params.newOrderRespType || 'RESULT'
+          newOrderRespType: params.newOrderRespType || 'RESULT',
         };
-        
+
         if (params.quantity !== undefined) orderParams.quantity = params.quantity;
         if (params.quoteOrderQty !== undefined) orderParams.quoteOrderQty = params.quoteOrderQty;
         if (params.price !== undefined) orderParams.price = params.price;
-        if (params.newClientOrderId !== undefined) orderParams.newClientOrderId = params.newClientOrderId;
+        if (params.newClientOrderId !== undefined)
+          orderParams.newClientOrderId = params.newClientOrderId;
         if (params.stopPrice !== undefined) orderParams.stopPrice = params.stopPrice;
         if (params.icebergQty !== undefined) orderParams.icebergQty = params.icebergQty;
         if (params.timeInForce !== undefined) orderParams.timeInForce = params.timeInForce;
-        
-        return await this.client.newOrder(
-          params.symbol,
-          params.side,
-          params.type,
-          orderParams
-        );
+
+        return await this.client.newOrder(params.symbol, params.side, params.type, orderParams);
       });
 
       this.rateLimiter.recordRequest('order');
-      
+
       this.logger.info('Order created successfully', {
         symbol: params.symbol,
         side: params.side,
         type: params.type,
-        orderId: response.data.orderId
+        orderId: response.data.orderId,
       });
 
       return response.data;
@@ -251,26 +237,25 @@ export class BinanceService {
    */
   public async cancelOrder(params: CancelOrderParams): Promise<BinanceOrderResponse> {
     await this.rateLimiter.waitForRateLimit('order');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         const cancelParams: any = {};
-        
+
         if (params.orderId !== undefined) cancelParams.orderId = params.orderId;
-        if (params.origClientOrderId !== undefined) cancelParams.origClientOrderId = params.origClientOrderId;
-        if (params.newClientOrderId !== undefined) cancelParams.newClientOrderId = params.newClientOrderId;
-        
-        return await this.client.cancelOrder(
-          params.symbol,
-          cancelParams
-        );
+        if (params.origClientOrderId !== undefined)
+          cancelParams.origClientOrderId = params.origClientOrderId;
+        if (params.newClientOrderId !== undefined)
+          cancelParams.newClientOrderId = params.newClientOrderId;
+
+        return await this.client.cancelOrder(params.symbol, cancelParams);
       });
 
       this.rateLimiter.recordRequest('order');
-      
+
       this.logger.info('Order cancelled successfully', {
         symbol: params.symbol,
-        orderId: params.orderId || params.origClientOrderId
+        orderId: params.orderId || params.origClientOrderId,
       });
 
       return response.data;
@@ -285,18 +270,16 @@ export class BinanceService {
    */
   public async queryOrder(params: QueryOrderParams): Promise<BinanceOrderResponse> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         const queryParams: any = {};
-        
+
         if (params.orderId !== undefined) queryParams.orderId = params.orderId;
-        if (params.origClientOrderId !== undefined) queryParams.origClientOrderId = params.origClientOrderId;
-        
-        return await this.client.getOrder(
-          params.symbol,
-          queryParams
-        );
+        if (params.origClientOrderId !== undefined)
+          queryParams.origClientOrderId = params.origClientOrderId;
+
+        return await this.client.getOrder(params.symbol, queryParams);
       });
 
       this.rateLimiter.recordRequest('general');
@@ -312,7 +295,7 @@ export class BinanceService {
    */
   public async getSymbolPrice(symbol: string): Promise<BinanceTickerPrice> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         return await this.client.tickerPrice(symbol);
@@ -331,7 +314,7 @@ export class BinanceService {
    */
   public async get24hrTicker(symbol?: string): Promise<BinanceTicker24hr | BinanceTicker24hr[]> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         return await this.client.ticker24hr(symbol);
@@ -355,20 +338,20 @@ export class BinanceService {
   ): string {
     const stream = `${symbol.toLowerCase()}@kline_${interval}`;
     const subscriptionId = `${stream}_${Date.now()}`;
-    
+
     const subscription: WebSocketSubscription = {
       id: subscriptionId,
       stream,
-      callback
+      callback,
     };
 
     this.wsSubscriptions.set(subscriptionId, subscription);
     this.connectWebSocket(subscription);
-    
+
     this.logger.info('WebSocket kline subscription created', {
       subscriptionId,
       symbol,
-      interval
+      interval,
     });
 
     return subscriptionId;
@@ -390,7 +373,7 @@ export class BinanceService {
 
     this.wsSubscriptions.delete(subscriptionId);
     this.wsReconnectAttempts.delete(subscriptionId);
-    
+
     this.logger.info('WebSocket subscription cancelled', { subscriptionId });
   }
 
@@ -400,8 +383,8 @@ export class BinanceService {
   public async getExchangeInfo(): Promise<BinanceExchangeInfo> {
     const now = Date.now();
     const cacheValidDuration = 60 * 60 * 1000; // 1 hour
-    
-    if (this.exchangeInfo && (now - this.lastExchangeInfoUpdate) < cacheValidDuration) {
+
+    if (this.exchangeInfo && now - this.lastExchangeInfoUpdate < cacheValidDuration) {
       return this.exchangeInfo;
     }
 
@@ -441,7 +424,7 @@ export class BinanceService {
    */
   private async updateExchangeInfo(): Promise<void> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         return await this.client.exchangeInfo();
@@ -460,7 +443,7 @@ export class BinanceService {
       }
 
       this.logger.info('Exchange info updated', {
-        symbolCount: this.exchangeInfo?.symbols?.length || 0
+        symbolCount: this.exchangeInfo?.symbols?.length || 0,
       });
     } catch (error) {
       const binanceError = this.handleBinanceError(error, 'updateExchangeInfo');
@@ -473,7 +456,7 @@ export class BinanceService {
    */
   private async validateOrderParameters(params: CreateOrderParams): Promise<void> {
     const symbolInfo = await this.getSymbolInfo(params.symbol);
-    
+
     if (!symbolInfo) {
       throw new BinanceOrderValidationError(
         `Symbol ${params.symbol} not found`,
@@ -518,7 +501,7 @@ export class BinanceService {
             );
           }
 
-          if (tickSize > 0 && (price % tickSize) !== 0) {
+          if (tickSize > 0 && price % tickSize !== 0) {
             throw new BinanceSymbolFilterError(
               `Price ${price} does not meet tick size requirement ${tickSize}`,
               params.symbol,
@@ -545,7 +528,7 @@ export class BinanceService {
             );
           }
 
-          if (stepSize > 0 && (quantity % stepSize) !== 0) {
+          if (stepSize > 0 && quantity % stepSize !== 0) {
             throw new BinanceSymbolFilterError(
               `Quantity ${quantity} does not meet step size requirement ${stepSize}`,
               params.symbol,
@@ -578,10 +561,10 @@ export class BinanceService {
    * Connect WebSocket for subscription
    */
   private connectWebSocket(subscription: WebSocketSubscription): void {
-    const baseUrl = this.config.testnet 
-      ? 'wss://testnet.binance.vision/ws/' 
+    const baseUrl = this.config.testnet
+      ? 'wss://testnet.binance.vision/ws/'
       : 'wss://stream.binance.com:9443/ws/';
-    
+
     const wsUrl = `${baseUrl}${subscription.stream}`;
 
     try {
@@ -589,9 +572,9 @@ export class BinanceService {
       subscription.ws = ws;
 
       ws.on('open', () => {
-        this.logger.info('WebSocket connected', { 
+        this.logger.info('WebSocket connected', {
           subscriptionId: subscription.id,
-          stream: subscription.stream 
+          stream: subscription.stream,
         });
         this.wsReconnectAttempts.set(subscription.id, 0);
       });
@@ -601,35 +584,31 @@ export class BinanceService {
           const message = JSON.parse(data.toString());
           subscription.callback(message);
         } catch (error) {
-          this.logger.error('Failed to parse WebSocket message', { 
+          this.logger.error('Failed to parse WebSocket message', {
             error,
-            subscriptionId: subscription.id 
+            subscriptionId: subscription.id,
           });
         }
       });
 
-      ws.on('error', (error) => {
-        this.logger.error('WebSocket error', { 
+      ws.on('error', error => {
+        this.logger.error('WebSocket error', {
           error,
-          subscriptionId: subscription.id 
+          subscriptionId: subscription.id,
         });
       });
 
       ws.on('close', (code, reason) => {
-        this.logger.warn('WebSocket closed', { 
+        this.logger.warn('WebSocket closed', {
           code,
           reason: reason.toString(),
-          subscriptionId: subscription.id 
+          subscriptionId: subscription.id,
         });
-        
+
         this.handleWebSocketReconnect(subscription);
       });
-
     } catch (error) {
-      throw new BinanceWebSocketError(
-        `Failed to connect WebSocket: ${error}`,
-        error as Error
-      );
+      throw new BinanceWebSocketError(`Failed to connect WebSocket: ${error}`, error as Error);
     }
   }
 
@@ -638,11 +617,11 @@ export class BinanceService {
    */
   private handleWebSocketReconnect(subscription: WebSocketSubscription): void {
     const attempts = this.wsReconnectAttempts.get(subscription.id) || 0;
-    
+
     if (attempts >= this.maxWsReconnectAttempts) {
       this.logger.error('Max WebSocket reconnection attempts reached', {
         subscriptionId: subscription.id,
-        attempts
+        attempts,
       });
       return;
     }
@@ -653,7 +632,7 @@ export class BinanceService {
     this.logger.info('Attempting WebSocket reconnection', {
       subscriptionId: subscription.id,
       attempt: attempts + 1,
-      delay
+      delay,
     });
 
     setTimeout(() => {
@@ -678,7 +657,7 @@ export class BinanceService {
       quoteAssetVolume: parseFloat(raw[7]),
       numberOfTrades: raw[8],
       takerBuyBaseAssetVolume: parseFloat(raw[9]),
-      takerBuyQuoteAssetVolume: parseFloat(raw[10])
+      takerBuyQuoteAssetVolume: parseFloat(raw[10]),
     };
   }
 
@@ -696,16 +675,16 @@ export class BinanceService {
         return await fn();
       } catch (error) {
         lastError = error as Error;
-        
+
         // Check if error is retryable
         if (this.isRetryableError(error)) {
           const delay = 1000 * Math.pow(2, attempt - 1); // Exponential backoff
-          
+
           this.logger.warn('Request failed, retrying', {
             attempt,
             maxRetries,
             delay,
-            error: lastError.message
+            error: lastError.message,
           });
 
           if (attempt < maxRetries) {
@@ -713,7 +692,7 @@ export class BinanceService {
             continue;
           }
         }
-        
+
         throw error;
       }
     }
@@ -748,7 +727,7 @@ export class BinanceService {
     // Handle axios errors with Binance response
     if (error.response?.data?.code && error.response?.data?.msg) {
       const binanceError: BinanceError = error.response.data;
-      
+
       // Handle rate limiting
       if (binanceError.code === BINANCE_ERROR_CODES.TOO_MANY_REQUESTS) {
         const retryAfter = this.extractRetryAfter(error.response.headers);
@@ -790,18 +769,20 @@ export class BinanceService {
     symbol: string,
     interval: BinanceInterval,
     limit: number = 500
-  ): Promise<Array<{
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
-    timestamp: number;
-  }>> {
+  ): Promise<
+    Array<{
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+      timestamp: number;
+    }>
+  > {
     const klines = await this.getHistoricalKlines({
       symbol,
       interval,
-      limit
+      limit,
     });
 
     return klines.map((kline: BinanceKline) => ({
@@ -810,7 +791,7 @@ export class BinanceService {
       low: kline.low,
       close: kline.close,
       volume: kline.volume,
-      timestamp: kline.openTime
+      timestamp: kline.openTime,
     }));
   }
 
@@ -831,7 +812,7 @@ export class BinanceService {
     const klines = await this.getHistoricalKlines({
       symbol,
       interval,
-      limit: 1
+      limit: 1,
     });
 
     if (klines.length === 0) {
@@ -850,14 +831,14 @@ export class BinanceService {
         'No data returned'
       );
     }
-    
+
     return {
       open: kline.open,
       high: kline.high,
       low: kline.low,
       close: kline.close,
       volume: kline.volume,
-      timestamp: kline.openTime
+      timestamp: kline.openTime,
     };
   }
 
@@ -876,7 +857,7 @@ export class BinanceService {
       type: 'LIMIT',
       timeInForce: 'GTC',
       quantity,
-      price
+      price,
     });
   }
 
@@ -885,7 +866,7 @@ export class BinanceService {
    */
   public async getOpenOrders(symbol?: string): Promise<BinanceOrderResponse[]> {
     await this.rateLimiter.waitForRateLimit('general');
-    
+
     try {
       const response = await this.executeWithRetry(async () => {
         const params: any = {};
@@ -910,26 +891,26 @@ export class BinanceService {
     try {
       // First get all open orders for the symbol
       const openOrders = await this.getOpenOrders(symbol);
-      
+
       const cancelledOrders: BinanceOrderResponse[] = [];
-      
+
       // Cancel each order individually
       for (const order of openOrders) {
         try {
           const cancelledOrder = await this.cancelOrder({
             symbol: order.symbol,
-            orderId: order.orderId
+            orderId: order.orderId,
           });
           cancelledOrders.push(cancelledOrder);
         } catch (error) {
           this.logger.warn(`Failed to cancel order ${order.orderId}`, { error });
         }
       }
-      
+
       this.logger.info('Orders cancelled for symbol', {
         symbol,
         totalOrders: openOrders.length,
-        cancelledOrders: cancelledOrders.length
+        cancelledOrders: cancelledOrders.length,
       });
 
       return cancelledOrders;

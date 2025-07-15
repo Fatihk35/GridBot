@@ -7,9 +7,23 @@ import { z } from 'zod';
 /**
  * Binance kline/candlestick intervals
  */
-export type BinanceInterval = 
-  | '1s' | '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '2h' | '4h' | '6h' | '8h' | '12h' 
-  | '1d' | '3d' | '1w' | '1M';
+export type BinanceInterval =
+  | '1s'
+  | '1m'
+  | '3m'
+  | '5m'
+  | '15m'
+  | '30m'
+  | '1h'
+  | '2h'
+  | '4h'
+  | '6h'
+  | '8h'
+  | '12h'
+  | '1d'
+  | '3d'
+  | '1w'
+  | '1M';
 
 /**
  * Binance order side
@@ -19,16 +33,26 @@ export type BinanceOrderSide = 'BUY' | 'SELL';
 /**
  * Binance order type
  */
-export type BinanceOrderType = 
-  | 'LIMIT' | 'MARKET' | 'STOP_LOSS' | 'STOP_LOSS_LIMIT' 
-  | 'TAKE_PROFIT' | 'TAKE_PROFIT_LIMIT' | 'LIMIT_MAKER';
+export type BinanceOrderType =
+  | 'LIMIT'
+  | 'MARKET'
+  | 'STOP_LOSS'
+  | 'STOP_LOSS_LIMIT'
+  | 'TAKE_PROFIT'
+  | 'TAKE_PROFIT_LIMIT'
+  | 'LIMIT_MAKER';
 
 /**
  * Binance order status
  */
-export type BinanceOrderStatus = 
-  | 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELED' | 'PENDING_CANCEL' 
-  | 'REJECTED' | 'EXPIRED';
+export type BinanceOrderStatus =
+  | 'NEW'
+  | 'PARTIALLY_FILLED'
+  | 'FILLED'
+  | 'CANCELED'
+  | 'PENDING_CANCEL'
+  | 'REJECTED'
+  | 'EXPIRED';
 
 /**
  * Binance time in force
@@ -50,7 +74,7 @@ export const BinanceKlineSchema = z.tuple([
   z.number(), // Number of trades
   z.string(), // Taker buy base asset volume
   z.string(), // Taker buy quote asset volume
-  z.string()  // Ignore
+  z.string(), // Ignore
 ]);
 
 export type BinanceKlineRaw = z.infer<typeof BinanceKlineSchema>;

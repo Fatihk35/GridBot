@@ -359,10 +359,6 @@ export interface IBinanceService {
   createOrder(order: Omit<Order, 'id' | 'status' | 'timestamp'>): Promise<Order>;
   cancelOrder(symbol: string, orderId: number): Promise<void>;
   getExchangeInfo(): Promise<ExchangeInfo>;
-  subscribeToKlineUpdates(
-    symbol: string,
-    interval: string,
-    callback: (kline: any) => void
-  ): void;
+  subscribeToKlineUpdates(symbol: string, interval: string, callback: (kline: any) => void): void;
   unsubscribeFromKlineUpdates(symbol: string, interval: string): void;
 }

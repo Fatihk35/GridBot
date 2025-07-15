@@ -1,16 +1,16 @@
-/** * Custom error classes and error handling utilities *//** * Base error class for all custom errors */export abstract class BaseError extends Error {  public readonly code: string;  public readonly timestamp: number;  public readonly cause?: Error | undefined;  constructor(
-    message: string,
-    code: string,
-    cause?: Error
-  ) {
+/** * Custom error classes and error handling utilities */ /** * Base error class for all custom errors */ export abstract class BaseError extends Error {
+  public readonly code: string | undefined;
+  public readonly timestamp: number;
+  public readonly cause?: Error | undefined;
+  constructor(message: string, code?: string, cause?: Error) {
     super(message);
     this.code = code;
     this.timestamp = Date.now();
     this.cause = cause;
-    
+
     // Ensure proper prototype chain
     Object.setPrototypeOf(this, new.target.prototype);
-    
+
     // Capture stack trace
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
@@ -28,7 +28,7 @@ export class ConfigError extends BaseError {
     public readonly details?: unknown,
     cause?: Error
   ) {
-    super(message, code || 'CONFIG_ERROR', cause);
+    super(message, code, cause);
     this.name = 'ConfigError';
   }
 }
@@ -158,6 +158,11 @@ export class ErrorHandler {
   public static formatError(error: Error): string {
     const type = this.getErrorType(error);
     let formatted = `${type}: ${error.message}`;
+
+    // Add code if error is a BaseError instance
+    if (error instanceof BaseError && error.code) {
+      formatted += ` | Code: ${error.code}`;
+    }
 
     if (this.isConfigError(error)) {
       if (error.details) {

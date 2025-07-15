@@ -14,7 +14,9 @@ const BudgetConfigSchema = z.object({
  */
 const SymbolConfigSchema = z.object({
   pair: z.string().min(1, 'Symbol pair must not be empty'),
-  minDailyBarDiffThreshold: z.number().positive('Minimum daily bar diff threshold must be positive'),
+  minDailyBarDiffThreshold: z
+    .number()
+    .positive('Minimum daily bar diff threshold must be positive'),
   gridSize: z.number().positive('Grid size must be positive').optional().default(100),
   pricePrecision: z.number().int().min(1).max(8).optional().default(8),
   quantityPrecision: z.number().int().min(1).max(8).optional().default(8),
@@ -34,7 +36,10 @@ const ApiKeysConfigSchema = z.object({
  * Zod schema for strategy settings configuration validation
  */
 const StrategySettingsConfigSchema = z.object({
-  barCountForVolatility: z.number().int().positive('Bar count for volatility must be a positive integer'),
+  barCountForVolatility: z
+    .number()
+    .int()
+    .positive('Bar count for volatility must be a positive integer'),
   minVolatilityPercentage: z.number().positive('Minimum volatility percentage must be positive'),
   minVolatileBarRatio: z.number().positive('Minimum volatile bar ratio must be positive'),
   emaPeriod: z.number().int().positive('EMA period must be a positive integer'),
@@ -110,7 +115,7 @@ export class ConfigValidator {
     }>;
   } {
     const result = BotConfigSchema.safeParse(config);
-    
+
     if (result.success) {
       return {
         success: true,
