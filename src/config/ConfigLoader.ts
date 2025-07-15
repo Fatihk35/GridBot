@@ -1,8 +1,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { BotConfigType, ConfigValidator } from '@/config/schema';
-import { ConfigError } from '@/utils/errors';
-import { Logger } from '@/utils/logger';
+import { BotConfigType, ConfigValidator } from './schema';
+import { ConfigError } from '../utils/errors';
+import { Logger } from '../utils/logger';
 
 /**
  * Configuration loader class

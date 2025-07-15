@@ -1,5 +1,5 @@
 import winston from 'winston';
-import { ILogger, LoggingConfig } from '@/types';
+import { ILogger, LoggingConfig } from '../types';
 
 /**
  * Custom logger implementation using Winston

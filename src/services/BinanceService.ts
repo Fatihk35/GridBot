@@ -8,9 +8,9 @@ import { Spot } from '@binance/connector';
 import WebSocket from 'ws';
 import { z } from 'zod';
 
-import { BotConfigType } from '@/config/schema';
-import { Logger } from '@/utils/logger';
-import { RateLimiter } from '@/utils/rateLimiter';
+import { BotConfigType } from '../config/schema';
+import { Logger } from '../utils/logger';
+import { RateLimiter } from '../utils/rateLimiter';
 import {
   BinanceApiError,
   BinanceRateLimitError,
@@ -18,7 +18,7 @@ import {
   BinanceOrderValidationError,
   BinanceSymbolFilterError,
   BINANCE_ERROR_CODES,
-} from '@/utils/binanceErrors';
+} from '../utils/binanceErrors';
 
 import {
   BinanceInterval,
@@ -41,7 +41,7 @@ import {
   CancelOrderParams,
   GetKlinesParams,
   BinanceKlineSchema,
-} from '@/types/binance';
+} from '../types/binance';
 
 /**
  * Binance service configuration

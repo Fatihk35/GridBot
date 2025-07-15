@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BotConfig } from '@/types';
+import { BotConfig } from '../types';
 
 /**
  * Zod schema for budget configuration validation

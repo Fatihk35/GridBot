@@ -2,7 +2,7 @@
  * Tests for Error handling utilities
  */
 
-import { ConfigError, ValidateError, ApiError, ErrorHandler } from '@/utils/errors';
+import { ConfigError, ValidateError, ApiError, ErrorHandler } from '../utils/errors';
 
 describe('Custom Error Classes', () => {
   describe('ConfigError', () => {

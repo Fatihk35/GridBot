@@ -3,15 +3,15 @@
  */
 
 import { EventEmitter } from 'events';
-import { PaperTrader } from '@/services/PaperTrader';
-import { BinanceService } from '@/services/BinanceService';
-import { StrategyEngine } from '@/services/StrategyEngine';
-import { NotificationService } from '@/services/NotificationService';
-import { ReportService } from '@/services/ReportService';
-import { Logger } from '@/utils/logger';
-import { BotConfigType } from '@/config/schema';
-import { VirtualOrder, VirtualBalance } from '@/types';
-import { BinanceWebSocketKline } from '@/types/binance';
+import { PaperTrader } from '../services/PaperTrader';
+import { BinanceService } from '../services/BinanceService';
+import { StrategyEngine } from '../services/StrategyEngine';
+import { NotificationService } from '../services/NotificationService';
+import { ReportService } from '../services/ReportService';
+import { Logger } from '../utils/logger';
+import { BotConfigType } from '../config/schema';
+import { VirtualOrder, VirtualBalance } from '../types';
+import { BinanceWebSocketKline } from '../types/binance';
 
 // Mock dependencies
 jest.mock('@/services/BinanceService');

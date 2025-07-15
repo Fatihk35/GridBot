@@ -2,8 +2,8 @@
  * Binance-specific error handling
  */
 
-import { BaseError } from '@/utils/errors';
-import { BinanceError } from '@/types/binance';
+import { BaseError } from '../utils/errors';
+import { BinanceError } from '../types/binance';
 
 /**
  * Binance API error codes and their meanings

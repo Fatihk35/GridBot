@@ -7,13 +7,13 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
-import { BotConfigType } from '@/config/schema';
-import { BinanceService } from '@/services/BinanceService';
-import { StrategyEngine, TradingSignal } from '@/services/StrategyEngine';
-import { NotificationService } from '@/services/NotificationService';
-import { ReportService } from '@/services/ReportService';
-import { Logger } from '@/utils/logger';
-import { CandlestickData } from '@/utils/indicators';
+import { BotConfigType } from '../config/schema';
+import { BinanceService } from './BinanceService';
+import { StrategyEngine, TradingSignal } from './StrategyEngine';
+import { NotificationService } from './NotificationService';
+import { ReportService } from './ReportService';
+import { Logger } from '../utils/logger';
+import { CandlestickData } from '../utils/indicators';
 import {
   VirtualBalance,
   VirtualOrder,
@@ -21,8 +21,8 @@ import {
   PaperTradingResult,
   PaperTradingConfig,
   MarketDataBar,
-} from '@/types';
-import { BinanceWebSocketKline } from '@/types/binance';
+} from '../types';
+import { BinanceWebSocketKline } from '../types/binance';
 
 /**
  * Virtual order schema for validation

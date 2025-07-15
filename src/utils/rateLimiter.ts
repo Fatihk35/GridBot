@@ -2,8 +2,8 @@
  * Rate limiter for Binance API calls
  */
 
-import { Logger } from '@/utils/logger';
-import { BinanceRateLimitError } from '@/utils/binanceErrors';
+import { Logger } from '../utils/logger';
+import { BinanceRateLimitError } from '../utils/binanceErrors';
 
 /**
  * Rate limit configuration

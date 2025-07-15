@@ -5,9 +5,9 @@
 
 import TelegramBot from 'node-telegram-bot-api';
 import { z } from 'zod';
-import { Logger } from '@/utils/logger';
-import { BotConfigType } from '@/config/schema';
-import { NotificationMessage } from '@/types';
+import { Logger } from '../utils/logger';
+import { BotConfigType } from '../config/schema';
+import { NotificationMessage } from '../types';
 
 /**
  * Notification service configuration schema

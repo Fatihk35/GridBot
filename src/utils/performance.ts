@@ -9,7 +9,7 @@ import {
   SymbolPerformance,
   BacktestResult,
   PerformanceCalculationOptions,
-} from '@/types/backtest';
+} from '../types/backtest';
 
 /**
  * Default performance calculation options

@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
 
-import { Logger } from '@/utils/logger';
+import { Logger } from '../utils/logger';
 import {
   BacktestResult,
   BacktestTrade,
@@ -17,7 +17,7 @@ import {
   MarketDataStats,
   BacktestTradeSchema,
   PortfolioSnapshotSchema,
-} from '@/types/backtest';
+} from '../types/backtest';
 
 /**
  * Transaction log entry schema for validation

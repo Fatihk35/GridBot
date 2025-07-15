@@ -2,8 +2,8 @@
  * Tests for configuration schema validation
  */
 
-import { BotConfigSchema, ConfigValidator } from '@/config/schema';
-import { BotConfig } from '@/types';
+import { BotConfigSchema, ConfigValidator } from '../config/schema';
+import { BotConfig } from '../types';
 
 describe('BotConfigSchema', () => {
   let validConfig: any;
