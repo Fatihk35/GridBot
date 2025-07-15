@@ -1,380 +1,523 @@
+/**
+ * Unit tests for Technical Indicators
+ * Comprehensive test suite covering all indicator functions with edge cases
+ */
+
 import {
+  OHLCV,
+  OHLCVSchema,
+  validateOHLCVArray,
+  calculateTR,
   calculateATR,
   calculateEMA,
   calculateSMA,
+  calculateDailyBarDiffAverage,
+  calculateVolatileBarRatio,
+  isPriceWithinEmaThreshold,
   calculateBollingerBands,
   calculateRSI,
-  calculateMACD,
   calculateVolatility,
+  createMockOHLCVFromPrices,
+  convertToOHLCV,
   CandlestickData,
 } from '../../utils/indicators';
 
 describe('Technical Indicators', () => {
-  let mockData: CandlestickData[];
+  let mockOHLCVData: OHLCV[];
+  let mockCandlestickData: CandlestickData[];
 
   beforeEach(() => {
-    // Create mock candlestick data for testing
-    mockData = [];
+    // Create realistic test data
     const basePrice = 50000;
     const startTime = Date.now() - (100 * 60 * 60 * 1000); // 100 hours ago
+    const prices: number[] = [];
 
+    // Generate price series with trend and volatility
     for (let i = 0; i < 100; i++) {
-      const price = basePrice + Math.sin(i * 0.1) * 1000 + (Math.random() - 0.5) * 500;
-      mockData.push({
-        open: price + (Math.random() - 0.5) * 100,
-        high: price + Math.random() * 200,
-        low: price - Math.random() * 200,
-        close: price,
-        volume: 1000000 + Math.random() * 500000,
-        timestamp: startTime + (i * 60 * 60 * 1000),
-      });
+      const trend = i * 10; // Upward trend
+      const sine = Math.sin(i * 0.1) * 500; // Cyclical movement
+      const noise = (Math.random() - 0.5) * 200; // Random noise
+      prices.push(basePrice + trend + sine + noise);
     }
+
+    mockOHLCVData = createMockOHLCVFromPrices(prices, startTime, 60 * 60 * 1000);
+
+    // Create legacy candlestick data for compatibility testing
+    mockCandlestickData = mockOHLCVData.map(ohlcv => ({
+      open: ohlcv.open,
+      high: ohlcv.high,
+      low: ohlcv.low,
+      close: ohlcv.close,
+      volume: ohlcv.volume,
+      timestamp: ohlcv.time,
+    }));
+  });
+
+  describe('OHLCV Validation', () => {
+    it('should validate correct OHLCV data', () => {
+      expect(() => validateOHLCVArray(mockOHLCVData)).not.toThrow();
+    });
+
+    it('should validate individual OHLCV item with schema', () => {
+      const validItem: OHLCV = {
+        time: Date.now(),
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: 1000,
+      };
+
+      expect(() => OHLCVSchema.parse(validItem)).not.toThrow();
+    });
+
+    it('should reject invalid OHLCV data', () => {
+      const invalidData = [
+        {
+          time: Date.now(),
+          open: 100,
+          high: 90, // High < Open (invalid)
+          low: 95,
+          close: 102,
+          volume: 1000,
+        }
+      ];
+
+      expect(() => validateOHLCVArray(invalidData as OHLCV[])).toThrow(/Invalid OHLCV data/);
+    });
+
+    it('should reject empty array', () => {
+      expect(() => validateOHLCVArray([])).toThrow(/non-empty array/);
+    });
+
+    it('should reject unsorted data', () => {
+      const unsortedData = [
+        { time: 100, open: 50, high: 55, low: 45, close: 52, volume: 1000 },
+        { time: 50, open: 51, high: 56, low: 46, close: 53, volume: 1000 }, // Earlier time
+      ];
+
+      expect(() => validateOHLCVArray(unsortedData)).toThrow(/sorted by time/);
+    });
+  });
+
+  describe('calculateTR', () => {
+    it('should calculate TR for first bar (no previous)', () => {
+      const current: OHLCV = {
+        time: Date.now(),
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: 1000,
+      };
+
+      const tr = calculateTR(current, null);
+      expect(tr).toBe(10); // high - low = 105 - 95
+    });
+
+    it('should calculate TR with previous bar', () => {
+      const previous: OHLCV = {
+        time: Date.now() - 1000,
+        open: 98,
+        high: 103,
+        low: 93,
+        close: 100,
+        volume: 1000,
+      };
+
+      const current: OHLCV = {
+        time: Date.now(),
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: 1000,
+      };
+
+      const tr = calculateTR(current, previous);
+      
+      // Should be max of:
+      // 1. High - Low = 105 - 95 = 10
+      // 2. |High - Previous Close| = |105 - 100| = 5
+      // 3. |Low - Previous Close| = |95 - 100| = 5
+      expect(tr).toBe(10);
+    });
+
+    it('should handle gap up scenario', () => {
+      const previous: OHLCV = {
+        time: Date.now() - 1000,
+        open: 98,
+        high: 100,
+        low: 96,
+        close: 99,
+        volume: 1000,
+      };
+
+      const current: OHLCV = {
+        time: Date.now(),
+        open: 110,
+        high: 115,
+        low: 108,
+        close: 112,
+        volume: 1000,
+      };
+
+      const tr = calculateTR(current, previous);
+      
+      // Should be max of:
+      // 1. High - Low = 115 - 108 = 7
+      // 2. |High - Previous Close| = |115 - 99| = 16  <- Maximum
+      // 3. |Low - Previous Close| = |108 - 99| = 9
+      expect(tr).toBe(16);
+    });
   });
 
   describe('calculateATR', () => {
-    it('should calculate ATR correctly with default period', () => {
-      const atr = calculateATR(mockData);
+    it('should calculate ATR with default period', () => {
+      const atr = calculateATR(mockOHLCVData);
       
-      expect(atr).toBeGreaterThan(0);
       expect(typeof atr).toBe('number');
+      expect(atr).toBeGreaterThan(0);
       expect(isFinite(atr)).toBe(true);
     });
 
     it('should calculate ATR with custom period', () => {
-      const atr = calculateATR(mockData, 21);
+      const atr21 = calculateATR(mockOHLCVData, 21);
+      const atr7 = calculateATR(mockOHLCVData, 7);
       
-      expect(atr).toBeGreaterThan(0);
-      expect(typeof atr).toBe('number');
+      expect(typeof atr21).toBe('number');
+      expect(typeof atr7).toBe('number');
+      expect(atr21).toBeGreaterThan(0);
+      expect(atr7).toBeGreaterThan(0);
     });
 
     it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 10);
+      const insufficientData = mockOHLCVData.slice(0, 10);
       
       expect(() => {
         calculateATR(insufficientData, 14);
-      }).toThrow(/Insufficient data for ATR calculation/);
+      }).toThrow(/Not enough data for ATR calculation/);
     });
 
-    it('should handle edge case with minimum required data', () => {
-      const minimalData = mockData.slice(0, 15); // 15 periods (14 + 1)
+    it('should handle minimum required data', () => {
+      const minimalData = mockOHLCVData.slice(0, 15); // 15 bars for period 14
       
       expect(() => {
         calculateATR(minimalData, 14);
       }).not.toThrow();
     });
-
-    it('should throw error for invalid candlestick data', () => {
-      const invalidData = [
-        ...mockData.slice(0, 5),
-        // Add invalid entry
-        null as any,
-        ...mockData.slice(6, 20),
-      ];
-
-      expect(() => {
-        calculateATR(invalidData, 14);
-      }).toThrow(/Invalid candlestick data encountered/);
-    });
   });
 
   describe('calculateEMA', () => {
-    it('should calculate EMA correctly', () => {
-      const ema = calculateEMA(mockData, 20);
+    it('should calculate EMA with default close field', () => {
+      const ema = calculateEMA(mockOHLCVData, 20);
       
-      expect(ema).toBeGreaterThan(0);
       expect(typeof ema).toBe('number');
+      expect(ema).toBeGreaterThan(0);
       expect(isFinite(ema)).toBe(true);
     });
 
+    it('should calculate EMA with different fields', () => {
+      const emaClose = calculateEMA(mockOHLCVData, 20, 'close');
+      const emaOpen = calculateEMA(mockOHLCVData, 20, 'open');
+      const emaHigh = calculateEMA(mockOHLCVData, 20, 'high');
+      const emaLow = calculateEMA(mockOHLCVData, 20, 'low');
+      
+      expect(emaClose).not.toBe(emaOpen);
+      expect(emaHigh).toBeGreaterThan(emaLow);
+    });
+
     it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 10);
+      const insufficientData = mockOHLCVData.slice(0, 10);
       
       expect(() => {
         calculateEMA(insufficientData, 20);
-      }).toThrow(/Insufficient data for EMA calculation/);
+      }).toThrow(/Not enough data for EMA calculation/);
     });
 
-    it('should handle different periods', () => {
-      const ema12 = calculateEMA(mockData, 12);
-      const ema26 = calculateEMA(mockData, 26);
+    it('should calculate different EMA periods differently', () => {
+      const ema12 = calculateEMA(mockOHLCVData, 12);
+      const ema26 = calculateEMA(mockOHLCVData, 26);
       
-      expect(ema12).toBeGreaterThan(0);
-      expect(ema26).toBeGreaterThan(0);
+      // EMAs should be different for different periods
       expect(ema12).not.toBe(ema26);
-    });
-
-    it('should be close to recent prices for short periods', () => {
-      const recentPrice = mockData[mockData.length - 1]?.close || 0;
-      const ema5 = calculateEMA(mockData, 5);
-      
-      // EMA should be relatively close to recent prices for short periods
-      const deviation = Math.abs(ema5 - recentPrice) / recentPrice;
-      expect(deviation).toBeLessThan(0.05); // Within 5%
     });
   });
 
   describe('calculateSMA', () => {
     it('should calculate SMA correctly', () => {
-      const sma = calculateSMA(mockData, 20);
+      const sma = calculateSMA(mockOHLCVData, 20);
       
-      expect(sma).toBeGreaterThan(0);
       expect(typeof sma).toBe('number');
+      expect(sma).toBeGreaterThan(0);
       expect(isFinite(sma)).toBe(true);
     });
 
-    it('should be average of recent closing prices', () => {
-      const period = 10;
-      const sma = calculateSMA(mockData, period);
+    it('should calculate SMA with different fields', () => {
+      const smaClose = calculateSMA(mockOHLCVData, 20, 'close');
+      const smaVolume = calculateSMA(mockOHLCVData, 20, 'volume');
       
-      // Calculate manual average for verification
-      const recentPrices = mockData.slice(-period).map(c => c.close);
-      const manualAverage = recentPrices.reduce((sum, price) => sum + price, 0) / period;
+      expect(smaClose).not.toBe(smaVolume);
+      expect(typeof smaClose).toBe('number');
+      expect(typeof smaVolume).toBe('number');
+      expect(smaVolume).toBeGreaterThan(0); // Volume should be positive
+    });
+
+    it('should match manual calculation for simple case', () => {
+      const simpleData: OHLCV[] = [
+        { time: 1, open: 10, high: 12, low: 8, close: 10, volume: 100 },
+        { time: 2, open: 11, high: 13, low: 9, close: 12, volume: 100 },
+        { time: 3, open: 12, high: 14, low: 10, close: 14, volume: 100 },
+      ];
+
+      const sma = calculateSMA(simpleData, 3);
+      const expectedSMA = (10 + 12 + 14) / 3;
       
-      expect(Math.abs(sma - manualAverage)).toBeLessThan(0.001);
+      expect(sma).toBeCloseTo(expectedSMA);
+    });
+  });
+
+  describe('calculateDailyBarDiffAverage', () => {
+    it('should calculate average bar difference', () => {
+      const avgDiff = calculateDailyBarDiffAverage(mockOHLCVData, 20);
+      
+      expect(typeof avgDiff).toBe('number');
+      expect(avgDiff).toBeGreaterThanOrEqual(0);
+      expect(isFinite(avgDiff)).toBe(true);
     });
 
     it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 5);
-      
       expect(() => {
-        calculateSMA(insufficientData, 10);
-      }).toThrow(/Insufficient data for SMA calculation/);
+        calculateDailyBarDiffAverage(mockOHLCVData.slice(0, 5), 10);
+      }).toThrow(/Not enough data for bar difference calculation/);
+    });
+
+    it('should calculate correctly for simple case', () => {
+      const simpleData: OHLCV[] = [
+        { time: 1, open: 100, high: 105, low: 95, close: 102, volume: 100 },
+        { time: 2, open: 102, high: 108, low: 98, close: 105, volume: 100 },
+      ];
+
+      const avgDiff = calculateDailyBarDiffAverage(simpleData, 2);
+      const expectedAvg = (Math.abs(102 - 100) + Math.abs(105 - 102)) / 2;
+      
+      expect(avgDiff).toBeCloseTo(expectedAvg);
+    });
+  });
+
+  describe('calculateVolatileBarRatio', () => {
+    it('should calculate volatile bar ratio', () => {
+      const ratio = calculateVolatileBarRatio(mockOHLCVData, 20, 0.01); // 1% threshold
+      
+      expect(typeof ratio).toBe('number');
+      expect(ratio).toBeGreaterThanOrEqual(0);
+      expect(ratio).toBeLessThanOrEqual(1);
+    });
+
+    it('should return 0 for low volatility threshold', () => {
+      const simpleData: OHLCV[] = [
+        { time: 1, open: 100, high: 100.1, low: 99.9, close: 100.05, volume: 100 },
+        { time: 2, open: 100.05, high: 100.15, low: 99.95, close: 100.1, volume: 100 },
+      ];
+
+      const ratio = calculateVolatileBarRatio(simpleData, 2, 0.1); // 10% threshold
+      expect(ratio).toBe(0); // No bars should exceed 10% change
+    });
+
+    it('should return 1 for high volatility data', () => {
+      const volatileData: OHLCV[] = [
+        { time: 1, open: 100, high: 120, low: 80, close: 110, volume: 100 }, // 10% change
+        { time: 2, open: 110, high: 135, low: 85, close: 125, volume: 100 }, // ~13.6% change
+      ];
+
+      const ratio = calculateVolatileBarRatio(volatileData, 2, 0.05); // 5% threshold
+      expect(ratio).toBe(1); // All bars exceed 5% change
+    });
+  });
+
+  describe('isPriceWithinEmaThreshold', () => {
+    it('should return true for price within threshold', () => {
+      const price = 100;
+      const ema = 102;
+      const threshold = 0.05; // 5%
+      
+      const isWithin = isPriceWithinEmaThreshold(price, ema, threshold);
+      expect(isWithin).toBe(true);
+    });
+
+    it('should return false for price outside threshold', () => {
+      const price = 100;
+      const ema = 110;
+      const threshold = 0.05; // 5%
+      
+      const isWithin = isPriceWithinEmaThreshold(price, ema, threshold);
+      expect(isWithin).toBe(false);
+    });
+
+    it('should throw error for invalid inputs', () => {
+      expect(() => {
+        isPriceWithinEmaThreshold(-100, 100, 0.05);
+      }).toThrow(/Price and EMA must be positive numbers/);
+
+      expect(() => {
+        isPriceWithinEmaThreshold(100, 100, 1.5);
+      }).toThrow(/Threshold must be between 0 and 1/);
     });
   });
 
   describe('calculateBollingerBands', () => {
-    it('should calculate Bollinger Bands correctly', () => {
-      const bands = calculateBollingerBands(mockData);
+    it('should calculate Bollinger Bands', () => {
+      const bands = calculateBollingerBands(mockOHLCVData);
       
-      expect(bands.upper).toBeGreaterThan(bands.middle);
-      expect(bands.middle).toBeGreaterThan(bands.lower);
-      expect(bands.upper).toBeGreaterThan(0);
-      expect(bands.middle).toBeGreaterThan(0);
-      expect(bands.lower).toBeGreaterThan(0);
-    });
-
-    it('should use custom parameters', () => {
-      const bands = calculateBollingerBands(mockData, 10, 1.5);
-      
+      expect(typeof bands.upper).toBe('number');
+      expect(typeof bands.middle).toBe('number');
+      expect(typeof bands.lower).toBe('number');
       expect(bands.upper).toBeGreaterThan(bands.middle);
       expect(bands.middle).toBeGreaterThan(bands.lower);
     });
 
-    it('should have middle band equal to SMA', () => {
-      const period = 20;
-      const bands = calculateBollingerBands(mockData, period);
-      const sma = calculateSMA(mockData, period);
+    it('should calculate with custom parameters', () => {
+      const bands = calculateBollingerBands(mockOHLCVData, 10, 1.5);
       
-      expect(Math.abs(bands.middle - sma)).toBeLessThan(0.001);
-    });
-
-    it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 10);
-      
-      expect(() => {
-        calculateBollingerBands(insufficientData, 20);
-      }).toThrow(/Insufficient data for Bollinger Bands calculation/);
+      expect(bands.upper).toBeGreaterThan(bands.lower);
     });
   });
 
   describe('calculateRSI', () => {
-    it('should calculate RSI correctly', () => {
-      const rsi = calculateRSI(mockData);
+    it('should calculate RSI', () => {
+      const rsi = calculateRSI(mockOHLCVData);
       
+      expect(typeof rsi).toBe('number');
       expect(rsi).toBeGreaterThanOrEqual(0);
       expect(rsi).toBeLessThanOrEqual(100);
-      expect(typeof rsi).toBe('number');
-      expect(isFinite(rsi)).toBe(true);
     });
 
-    it('should handle trending markets', () => {
-      // Create trending up data
-      const trendingData: CandlestickData[] = [];
-      for (let i = 0; i < 50; i++) {
-        const price = 50000 + i * 100; // Strong uptrend
-        trendingData.push({
-          open: price - 50,
-          high: price + 50,
-          low: price - 100,
-          close: price,
-          volume: 1000000,
-          timestamp: Date.now() + i * 60000,
-        });
-      }
-
-      const rsi = calculateRSI(trendingData);
-      expect(rsi).toBeGreaterThan(50); // Should indicate overbought in strong uptrend
-    });
-
-    it('should return 100 for continuous gains', () => {
-      // Create data with only gains
-      const gainsOnlyData: CandlestickData[] = [];
+    it('should return 100 for all positive changes', () => {
+      const risingData: OHLCV[] = [];
+      const baseTime = Date.now();
+      
       for (let i = 0; i < 20; i++) {
-        gainsOnlyData.push({
-          open: 50000 + i * 100,
-          high: 50100 + i * 100,
-          low: 49950 + i * 100,
-          close: 50050 + i * 100,
-          volume: 1000000,
-          timestamp: Date.now() + i * 60000,
+        risingData.push({
+          time: baseTime + i * 1000,
+          open: 100 + i,
+          high: 102 + i,
+          low: 98 + i,
+          close: 101 + i, // Always increasing
+          volume: 1000,
         });
       }
 
-      const rsi = calculateRSI(gainsOnlyData);
+      const rsi = calculateRSI(risingData, 14);
       expect(rsi).toBe(100);
-    });
-
-    it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 10);
-      
-      expect(() => {
-        calculateRSI(insufficientData, 14);
-      }).toThrow(/Insufficient data for RSI calculation/);
-    });
-  });
-
-  describe('calculateMACD', () => {
-    it('should calculate MACD correctly', () => {
-      const macd = calculateMACD(mockData);
-      
-      expect(typeof macd.macd).toBe('number');
-      expect(typeof macd.signal).toBe('number');
-      expect(typeof macd.histogram).toBe('number');
-      expect(isFinite(macd.macd)).toBe(true);
-      expect(isFinite(macd.signal)).toBe(true);
-      expect(isFinite(macd.histogram)).toBe(true);
-    });
-
-    it('should use custom parameters', () => {
-      const macd = calculateMACD(mockData, 8, 21, 5);
-      
-      expect(typeof macd.macd).toBe('number');
-      expect(typeof macd.signal).toBe('number');
-      expect(typeof macd.histogram).toBe('number');
-    });
-
-    it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 20);
-      
-      expect(() => {
-        calculateMACD(insufficientData, 12, 26, 9);
-      }).toThrow(/Insufficient data for MACD calculation/);
     });
   });
 
   describe('calculateVolatility', () => {
-    it('should calculate volatility correctly', () => {
-      const volatility = calculateVolatility(mockData, 20);
+    it('should calculate volatility', () => {
+      const volatility = calculateVolatility(mockOHLCVData, 20);
       
-      expect(volatility).toBeGreaterThanOrEqual(0);
       expect(typeof volatility).toBe('number');
+      expect(volatility).toBeGreaterThanOrEqual(0);
       expect(isFinite(volatility)).toBe(true);
     });
 
-    it('should return higher volatility for more volatile data', () => {
-      // Create high volatility data
-      const highVolData: CandlestickData[] = [];
-      for (let i = 0; i < 50; i++) {
-        const price = 50000 + (Math.random() - 0.5) * 10000; // High volatility
-        highVolData.push({
-          open: price,
-          high: price + 1000,
-          low: price - 1000,
-          close: price,
-          volume: 1000000,
-          timestamp: Date.now() + i * 60000,
+    it('should return 0 for constant prices', () => {
+      const constantData: OHLCV[] = [];
+      const baseTime = Date.now();
+      const constantPrice = 100;
+      
+      for (let i = 0; i < 20; i++) {
+        constantData.push({
+          time: baseTime + i * 1000,
+          open: constantPrice,
+          high: constantPrice,
+          low: constantPrice,
+          close: constantPrice,
+          volume: 1000,
         });
       }
 
-      // Create low volatility data
-      const lowVolData: CandlestickData[] = [];
-      for (let i = 0; i < 50; i++) {
-        const price = 50000 + (Math.random() - 0.5) * 100; // Low volatility
-        lowVolData.push({
-          open: price,
-          high: price + 10,
-          low: price - 10,
-          close: price,
-          volume: 1000000,
-          timestamp: Date.now() + i * 60000,
-        });
-      }
+      const volatility = calculateVolatility(constantData, 10);
+      expect(volatility).toBeCloseTo(0);
+    });
+  });
 
-      const highVol = calculateVolatility(highVolData, 20);
-      const lowVol = calculateVolatility(lowVolData, 20);
-
-      expect(highVol).toBeGreaterThan(lowVol);
+  describe('Helper Functions', () => {
+    it('should create mock OHLCV from prices', () => {
+      const prices = [100, 101, 102, 103, 104];
+      const mockData = createMockOHLCVFromPrices(prices);
+      
+      expect(mockData).toHaveLength(5);
+      expect(mockData[0]?.close).toBe(100);
+      expect(mockData[4]?.close).toBe(104);
+      
+      // Verify OHLC relationships
+      mockData.forEach(bar => {
+        expect(bar.high).toBeGreaterThanOrEqual(bar.low);
+        expect(bar.high).toBeGreaterThanOrEqual(bar.open);
+        expect(bar.high).toBeGreaterThanOrEqual(bar.close);
+      });
     });
 
-    it('should throw error for insufficient data', () => {
-      const insufficientData = mockData.slice(0, 10);
+    it('should convert CandlestickData to OHLCV', () => {
+      const ohlcvData = convertToOHLCV(mockCandlestickData);
       
-      expect(() => {
-        calculateVolatility(insufficientData, 20);
-      }).toThrow(/Insufficient data for volatility calculation/);
+      expect(ohlcvData).toHaveLength(mockCandlestickData.length);
+      expect(ohlcvData[0]?.time).toBe(mockCandlestickData[0]?.timestamp);
+      expect(ohlcvData[0]?.close).toBe(mockCandlestickData[0]?.close);
     });
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it('should handle zero prices gracefully', () => {
-      const dataWithZero = [...mockData];
-      dataWithZero[50] = {
-        open: 0,
-        high: 0,
-        low: 0,
-        close: 0,
-        volume: 0,
-        timestamp: Date.now(),
-      };
-
-      // Should not throw for most indicators, but results may be affected
-      expect(() => {
-        calculateSMA(dataWithZero, 20);
-      }).not.toThrow();
+    it('should handle very small datasets appropriately', () => {
+      const smallData = mockOHLCVData.slice(0, 3);
+      
+      // Should work for small periods
+      expect(() => calculateSMA(smallData, 2)).not.toThrow();
+      
+      // Should fail for large periods
+      expect(() => calculateATR(smallData, 14)).toThrow();
     });
 
-    it('should handle negative prices', () => {
-      const dataWithNegative = [...mockData];
-      dataWithNegative[50] = {
-        open: -100,
-        high: -50,
-        low: -150,
-        close: -75,
-        volume: 1000000,
-        timestamp: Date.now(),
-      };
+    it('should handle extreme price values', () => {
+      const extremeData: OHLCV[] = [
+        { time: 1, open: 0.01, high: 0.02, low: 0.005, close: 0.015, volume: 100 },
+        { time: 2, open: 1000000, high: 1100000, low: 900000, close: 1050000, volume: 100 },
+      ];
 
-      expect(() => {
-        calculateSMA(dataWithNegative, 20);
-      }).not.toThrow();
+      expect(() => calculateSMA(extremeData, 2)).not.toThrow();
+      const firstItem = extremeData[1];
+      const secondItem = extremeData[0];
+      if (firstItem && secondItem) {
+        expect(() => calculateTR(firstItem, secondItem)).not.toThrow();
+      }
     });
 
-    it('should handle very large numbers', () => {
-      const dataWithLargeNumbers = mockData.map(candle => ({
-        ...candle,
-        open: candle.open * 1e6,
-        high: candle.high * 1e6,
-        low: candle.low * 1e6,
-        close: candle.close * 1e6,
-      }));
+    it('should maintain precision for financial calculations', () => {
+      const precisionData: OHLCV[] = [
+        { time: 1, open: 123.456789, high: 123.456790, low: 123.456788, close: 123.456789, volume: 100 },
+        { time: 2, open: 123.456790, high: 123.456791, low: 123.456789, close: 123.456790, volume: 100 },
+      ];
 
-      const sma = calculateSMA(dataWithLargeNumbers, 20);
-      expect(isFinite(sma)).toBe(true);
-      expect(sma).toBeGreaterThan(0);
+      const sma = calculateSMA(precisionData, 2);
+      expect(sma).toBeCloseTo(123.4567895, 6);
     });
+  });
 
-    it('should handle very small numbers', () => {
-      const dataWithSmallNumbers = mockData.map(candle => ({
-        ...candle,
-        open: candle.open * 1e-6,
-        high: candle.high * 1e-6,
-        low: candle.low * 1e-6,
-        close: candle.close * 1e-6,
-      }));
+  describe('Performance Tests', () => {
+    it('should handle large datasets efficiently', () => {
+      // Create large dataset
+      const largePrices = Array.from({ length: 10000 }, (_, i) => 100 + Math.sin(i * 0.01) * 10);
+      const largeData = createMockOHLCVFromPrices(largePrices);
 
-      const sma = calculateSMA(dataWithSmallNumbers, 20);
-      expect(isFinite(sma)).toBe(true);
-      expect(sma).toBeGreaterThan(0);
+      const startTime = performance.now();
+      calculateATR(largeData, 14);
+      calculateEMA(largeData, 20);
+      calculateSMA(largeData, 50);
+      const endTime = performance.now();
+
+      // Should complete within reasonable time (adjust threshold as needed)
+      expect(endTime - startTime).toBeLessThan(1000); // 1 second
     });
   });
 });

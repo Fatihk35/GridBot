@@ -203,16 +203,26 @@ async function errorHandlingExample(): Promise<void> {
  * Example 5: Real-world Trading Bot Integration
  */
 class ExampleTradingBot {
-  private notificationService: NotificationService;
+  private notificationService!: NotificationService;
   private isRunning = false;
   private totalTrades = 0;
   private currentProfit = 0;
   private balances = { USDT: 10000, BTC: 0, ETH: 0 };
-  private monitoringInterval?: NodeJS.Timeout;
+  private monitoringInterval: NodeJS.Timeout | undefined;
 
   constructor() {
-    const config = ConfigLoader.load();
-    this.notificationService = new NotificationService(config);
+    this.initializeService();
+  }
+
+  private async initializeService() {
+    try {
+      const configLoader = new ConfigLoader();
+      const config = await configLoader.loadConfig();
+      this.notificationService = new NotificationService(config);
+    } catch (error) {
+      console.error('Failed to load config:', error);
+      throw error;
+    }
   }
 
   async start(): Promise<void> {
@@ -243,7 +253,7 @@ class ExampleTradingBot {
       
     } catch (error) {
       await this.notificationService.sendErrorNotification(
-        error,
+        error instanceof Error ? error : new Error(String(error)),
         'Bot Startup',
         { phase: 'initialization' }
       );
@@ -285,7 +295,7 @@ class ExampleTradingBot {
         
       } catch (error) {
         await this.notificationService.sendErrorNotification(
-          error,
+          error instanceof Error ? error : new Error(String(error)),
           'Trading Loop',
           { iteration: loopCount }
         );
@@ -312,8 +322,8 @@ class ExampleTradingBot {
     const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
     const sides: ('BUY' | 'SELL')[] = ['BUY', 'SELL'];
     
-    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-    const side = sides[Math.floor(Math.random() * sides.length)];
+    const symbol = symbols[Math.floor(Math.random() * symbols.length)] ?? 'BTCUSDT';
+    const side = sides[Math.floor(Math.random() * sides.length)] ?? 'BUY';
     const price = Math.random() * 50000 + 10000; // Random price
     const quantity = Math.random() * 0.1 + 0.01; // Random quantity
     
@@ -341,7 +351,7 @@ class ExampleTradingBot {
       
     } catch (error) {
       await this.notificationService.sendErrorNotification(
-        error,
+        error instanceof Error ? error : new Error(String(error)),
         'Trade Execution',
         { symbol, side, price, quantity }
       );
@@ -383,12 +393,22 @@ class ExampleTradingBot {
  * Example 6: Monitoring and Alert System
  */
 class MonitoringSystem {
-  private notificationService: NotificationService;
-  private monitoringInterval?: NodeJS.Timeout;
+  private notificationService!: NotificationService;
+  private monitoringInterval: NodeJS.Timeout | undefined;
 
   constructor() {
-    const config = ConfigLoader.load();
-    this.notificationService = new NotificationService(config);
+    this.initializeService();
+  }
+
+  private async initializeService() {
+    try {
+      const configLoader = new ConfigLoader();
+      const config = await configLoader.loadConfig();
+      this.notificationService = new NotificationService(config);
+    } catch (error) {
+      console.error('Failed to load config:', error);
+      throw error;
+    }
   }
 
   startMonitoring(): void {

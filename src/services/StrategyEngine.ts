@@ -1,5 +1,5 @@
 import { BotConfigType } from '../config/schema';
-import { calculateATR, calculateEMA, CandlestickData } from '../utils/indicators';
+import { calculateATR, calculateEMA, CandlestickData, convertToOHLCV } from '../utils/indicators';
 import { Logger } from '../utils/logger';
 import { z } from 'zod';
 
@@ -170,7 +170,7 @@ export class StrategyEngine {
         historicalData,
         this.strategyConfig.gridIntervalMethod
       );
-      const ema200 = calculateEMA(historicalData, this.strategyConfig.emaPeriod);
+      const ema200 = calculateEMA(convertToOHLCV(historicalData), this.strategyConfig.emaPeriod);
       const currentPrice = historicalData[historicalData.length - 1]?.close;
 
       if (!currentPrice) {
@@ -235,7 +235,7 @@ export class StrategyEngine {
   ): number {
     try {
       if (method === 'ATR') {
-        return calculateATR(historicalData, this.strategyConfig.atrPeriod);
+        return calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
       } else {
         // Daily Bar Difference method
         const barCount = this.strategyConfig.barCountForVolatility;
@@ -399,7 +399,7 @@ export class StrategyEngine {
       state.currentPrice = latestCandle.close;
 
       // Update indicators
-      state.ema200 = calculateEMA(historicalData, this.strategyConfig.emaPeriod);
+      state.ema200 = calculateEMA(convertToOHLCV(historicalData), this.strategyConfig.emaPeriod);
       state.atr = this.calculateGridInterval(
         historicalData,
         this.strategyConfig.gridIntervalMethod

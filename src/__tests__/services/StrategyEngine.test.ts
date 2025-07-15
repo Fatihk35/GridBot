@@ -77,11 +77,20 @@ describe('StrategyEngine', () => {
 
     for (let i = 0; i < 300; i++) {
       const price = basePrice + (Math.random() - 0.5) * 2000; // ±1000 volatility
+      const open = price + (Math.random() - 0.5) * 100;
+      const close = price + (Math.random() - 0.5) * 100;
+      
+      // Ensure valid OHLCV relationships: high >= max(open, close) and low <= min(open, close)
+      const maxOC = Math.max(open, close);
+      const minOC = Math.min(open, close);
+      const high = maxOC + Math.random() * 200; // high is always >= max(open, close)
+      const low = minOC - Math.random() * 200;  // low is always <= min(open, close)
+      
       mockHistoricalData.push({
-        open: price + (Math.random() - 0.5) * 100,
-        high: price + Math.random() * 200,
-        low: price - Math.random() * 200,
-        close: price,
+        open,
+        high,
+        low,
+        close,
         volume: 1000000 + Math.random() * 500000,
         timestamp: startTime + (i * 60 * 60 * 1000), // Hourly data
       });
@@ -472,10 +481,22 @@ describe('StrategyEngine', () => {
       const newEngine = new StrategyEngine(mockConfig);
       
       // Create different historical data for ETH
-      const ethData = mockHistoricalData.map(candle => ({
-        ...candle,
-        close: candle.close / 10, // ETH is ~1/10th of BTC price
-      }));
+      const ethData = mockHistoricalData.map(candle => {
+        const scaleFactor = 0.1; // ETH is ~1/10th of BTC price
+        const open = candle.open * scaleFactor;
+        const close = candle.close * scaleFactor;
+        const high = candle.high * scaleFactor;
+        const low = candle.low * scaleFactor;
+        
+        return {
+          open,
+          high,
+          low,
+          close,
+          volume: candle.volume,
+          timestamp: candle.timestamp,
+        };
+      });
 
       newEngine.initializeStrategy('BTCUSDT', mockHistoricalData);
       newEngine.initializeStrategy('ETHUSDT', ethData);

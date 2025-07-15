@@ -544,9 +544,12 @@ export class ReportService {
    */
   private generateHtmlReport(result: BacktestResult, options: ReportOptions): string {
     const symbolCount = result.symbolPerformance.size;
-    const bestSymbol = Array.from(result.symbolPerformance.values()).reduce((best, current) =>
-      current.netProfit > best.netProfit ? current : best
-    );
+    const symbolPerformanceArray = Array.from(result.symbolPerformance.values());
+    const bestSymbol = symbolPerformanceArray.length > 0 
+      ? symbolPerformanceArray.reduce((best, current) =>
+          current.netProfit > best.netProfit ? current : best
+        )
+      : null;
 
     return `
 <!DOCTYPE html>
