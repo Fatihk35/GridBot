@@ -25,6 +25,12 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env = originalEnv;
+  
+  // Clean up process event listeners to prevent memory leaks
+  process.removeAllListeners('uncaughtException');
+  process.removeAllListeners('unhandledRejection');
+  process.removeAllListeners('SIGINT');
+  process.removeAllListeners('SIGTERM');
 });
 
 // Global test utilities

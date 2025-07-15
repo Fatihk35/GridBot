@@ -3,17 +3,23 @@
   "version": "1.0.0",
   "description": "TypeScript Grid Trading Bot for Binance",
   "main": "dist/index.js",
+  "bin": {
+    "gridbot": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "ts-node -r tsconfig-paths/register src/index.ts",
+    "start": "node dist/index.js",
+    "start:cli": "node dist/cli.js",
     "dev": "ts-node src/index.ts",
+    "dev:cli": "ts-node src/cli.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "gridbot": "node dist/cli.js"
   },
   "keywords": [
     "trading",
@@ -28,6 +34,7 @@
   "dependencies": {
     "@binance/connector": "^3.6.1",
     "@types/uuid": "^10.0.0",
+    "commander": "^14.0.0",
     "dotenv": "^16.4.5",
     "node-binance-api": "^0.13.1",
     "node-telegram-bot-api": "^0.66.0",
@@ -38,6 +45,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/commander": "^2.12.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.8",
     "@types/node-telegram-bot-api": "^0.64.7",
