@@ -145,6 +145,18 @@ export interface TradeSignals {
 }
 
 /**
+ * Strategy signal interface for individual trade signals
+ */
+export interface StrategySignal {
+  price: number;
+  quantity: number;
+  side: OrderSide;
+  type: OrderType;
+  symbol: string;
+  gridLevel?: number;
+}
+
+/**
  * Historical market data bar
  */
 export interface MarketDataBar {

@@ -66,6 +66,51 @@ export class ApiError extends BaseError {
 }
 
 /**
+ * Trading-related error
+ */
+export class TradingError extends BaseError {
+  constructor(
+    message: string,
+    public readonly symbol?: string,
+    cause?: Error
+  ) {
+    super(message, 'TRADING_ERROR', cause);
+    this.name = 'TradingError';
+  }
+}
+
+/**
+ * Order-related error
+ */
+export class OrderError extends BaseError {
+  constructor(
+    message: string,
+    public readonly orderId?: string,
+    public readonly symbol?: string,
+    cause?: Error
+  ) {
+    super(message, 'ORDER_ERROR', cause);
+    this.name = 'OrderError';
+  }
+}
+
+/**
+ * Insufficient balance error
+ */
+export class InsufficientBalanceError extends BaseError {
+  constructor(
+    message: string,
+    public readonly currency?: string,
+    public readonly required?: number,
+    public readonly available?: number,
+    cause?: Error
+  ) {
+    super(message, 'INSUFFICIENT_BALANCE_ERROR', cause);
+    this.name = 'InsufficientBalanceError';
+  }
+}
+
+/**
  * Error handler utility functions
  */
 export class ErrorHandler {
