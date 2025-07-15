@@ -92,6 +92,11 @@ export class BinanceService {
   private maxWsReconnectAttempts: number = 10;
 
   constructor(config: BotConfigType) {
+    // Validate budget amount
+    if (config.maxBudget.amount <= 0) {
+      throw new Error('Budget amount must be positive');
+    }
+
     this.config = {
       apiKey: config.apiKeys.binanceApiKey,
       secretKey: config.apiKeys.binanceSecretKey,

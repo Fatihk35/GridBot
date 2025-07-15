@@ -250,6 +250,90 @@ export interface IConfigLoader {
 }
 
 /**
+ * Virtual balance for paper trading
+ */
+export interface VirtualBalance {
+  [currency: string]: number;
+}
+
+/**
+ * Virtual order for paper trading
+ */
+export interface VirtualOrder {
+  id: string;
+  symbol: string;
+  side: OrderSide;
+  type: OrderType;
+  price: number;
+  quantity: number;
+  status: 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELED';
+  filledQuantity: number;
+  createTime: number;
+  updateTime: number;
+  gridLevelIndex?: number;
+}
+
+/**
+ * Paper trading state
+ */
+export interface PaperTradingState {
+  isRunning: boolean;
+  startTime: number;
+  virtualBalances: VirtualBalance;
+  virtualOrders: Map<string, VirtualOrder>;
+  lastOrderId: number;
+  totalTrades: number;
+  totalProfit: number;
+  maxDrawdown: number;
+  highestBalance: number;
+}
+
+/**
+ * Paper trading result
+ */
+export interface PaperTradingResult {
+  symbol: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  initialBalance: number;
+  finalBalance: number;
+  totalProfit: number;
+  totalProfitPercentage: number;
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  winRate: number;
+  maxDrawdown: number;
+  trades: VirtualOrder[];
+  finalBalances: VirtualBalance;
+}
+
+/**
+ * Notification message
+ */
+export interface NotificationMessage {
+  type: 'info' | 'warning' | 'error' | 'success';
+  title: string;
+  message: string;
+  timestamp: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Paper trading configuration
+ */
+export interface PaperTradingConfig {
+  initialBalance: number;
+  currency: string;
+  enableReporting: boolean;
+  reportingInterval: number; // minutes
+  enableNotifications: boolean;
+  slippageRate: number;
+  latencyMs: number;
+}
+
+/**
  * Binance service interface
  */
 export interface IBinanceService {
@@ -263,4 +347,10 @@ export interface IBinanceService {
   createOrder(order: Omit<Order, 'id' | 'status' | 'timestamp'>): Promise<Order>;
   cancelOrder(symbol: string, orderId: number): Promise<void>;
   getExchangeInfo(): Promise<ExchangeInfo>;
+  subscribeToKlineUpdates(
+    symbol: string,
+    interval: string,
+    callback: (kline: any) => void
+  ): void;
+  unsubscribeFromKlineUpdates(symbol: string, interval: string): void;
 }
