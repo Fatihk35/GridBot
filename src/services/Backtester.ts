@@ -569,7 +569,13 @@ export class Backtester {
     // Create time-aligned data iterators
     const dataIterators = new Map<string, number>();
     for (const symbol of config.symbols) {
-      dataIterators.set(symbol, 500); // Start after initial data used for indicators
+      const dataResult = historicalDataMap.get(symbol);
+      const initialIndex = Math.min(500, Math.max(0, (dataResult?.data.length || 0) - 1));
+      dataIterators.set(symbol, initialIndex); // Start from available data, not fixed 500
+      this.logger.info(`Data iterator initialized for ${symbol}`, {
+        totalDataPoints: dataResult?.data.length || 0,
+        startingIndex: initialIndex
+      });
     }
 
     let processedCandles = 0;
@@ -591,10 +597,31 @@ export class Backtester {
           const dataResult = historicalDataMap.get(symbol)!;
           const currentIndex = dataIterators.get(symbol)!;
 
-          if (currentIndex >= dataResult.data.length) continue;
+          if (currentIndex >= dataResult.data.length) {
+            this.logger.debug(`Skipping ${symbol} - no more data`, {
+              currentIndex,
+              dataLength: dataResult.data.length
+            });
+            continue;
+          }
 
           const candle = dataResult.data[currentIndex];
-          if (!candle || candle.timestamp > currentTime) continue;
+          if (!candle || candle.timestamp > currentTime) {
+            this.logger.debug(`Skipping ${symbol} - candle not ready`, {
+              currentIndex,
+              candleTimestamp: candle?.timestamp,
+              currentTime,
+              hasCandle: !!candle
+            });
+            continue;
+          }
+
+          this.logger.info(`Processing candle for ${symbol}`, {
+            currentIndex,
+            currentTime: new Date(currentTime).toISOString(),
+            candleTime: new Date(candle.timestamp).toISOString(),
+            price: candle.close
+          });
 
           // Update current price
           currentPrices.set(symbol, candle.close);
@@ -632,7 +659,7 @@ export class Backtester {
               const orderParams: OrderSimulationParams = {
                 symbol,
                 side: 'BUY',
-                type: 'LIMIT',
+                type: 'MARKET',
                 quantity: buySignal.quantity,
                 price: buySignal.price,
                 candle,
@@ -650,17 +677,25 @@ export class Backtester {
                   result.commission
                 );
 
+                // Update grid level status
+                this.strategyEngine.updateGridLevelBuyFilled(
+                  symbol,
+                  buySignal.gridLevel.price,
+                  result.executedQuantity,
+                  result.executionPrice
+                );
+
                 const trade: BacktestTrade = {
                   id: uuidv4(),
                   timestamp: candle.timestamp,
                   symbol,
                   side: 'BUY',
-                  type: 'LIMIT',
+                  type: 'MARKET',
                   price: buySignal.price,
                   quantity: result.executedQuantity,
                   value: result.value,
                   commission: result.commission,
-                  gridLevel: buySignal.price,
+                  gridLevel: buySignal.gridLevel.price,
                   executionPrice: result.executionPrice,
                   slippage: result.slippage,
                   candleTime: candle.timestamp,
@@ -681,7 +716,7 @@ export class Backtester {
               const orderParams: OrderSimulationParams = {
                 symbol,
                 side: 'SELL',
-                type: 'LIMIT',
+                type: 'MARKET',
                 quantity: sellSignal.quantity,
                 price: sellSignal.price,
                 candle,
@@ -699,18 +734,24 @@ export class Backtester {
                   result.commission
                 );
 
+                // Update grid level status
+                this.strategyEngine.updateGridLevelSellFilled(
+                  symbol,
+                  sellSignal.gridLevel.price
+                );
+
                 const trade: BacktestTrade = {
                   id: uuidv4(),
                   timestamp: candle.timestamp,
                   symbol,
                   side: 'SELL',
-                  type: 'LIMIT',
+                  type: 'MARKET',
                   price: sellSignal.price,
                   quantity: result.executedQuantity,
                   value: result.value,
                   commission: result.commission,
                   profit,
-                  gridLevel: sellSignal.price,
+                  gridLevel: sellSignal.gridLevel.price,
                   executionPrice: result.executionPrice,
                   slippage: result.slippage,
                   candleTime: candle.timestamp,

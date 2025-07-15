@@ -418,7 +418,7 @@ export class GridBotApp extends EventEmitter {
         startTime: new Date(startDate).getTime(),
         endTime: new Date(endDate).getTime(),
         symbols: this.config.symbols.map(s => s.pair),
-        interval: '1h',
+        interval: '1m',
         initialBalance: this.config.maxBudget.amount,
         slippagePercentage: 0.001,
         enableDetailedLogging: true,

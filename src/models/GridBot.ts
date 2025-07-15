@@ -164,8 +164,8 @@ export class GridBot {
         // Get historical data for the symbol
         const historicalData = await this.binanceService.getHistoricalData(
           symbolConfig.pair,
-          '1h', // 1-hour intervals
-          300 // 300 periods (about 12.5 days)
+          '1m', // 1-minute intervals
+          300 // 300 periods (about 5 hours)
         );
 
         // Initialize strategy

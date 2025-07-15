@@ -305,11 +305,28 @@ export class StrategyEngine {
       const gridLevels: GridLevel[] = [];
       const gridCount = Math.floor(this.strategyConfig.gridLevelsCount / 2);
 
+      this.logger.info(`Calculating grid levels for ${symbol}`, {
+        currentPrice,
+        atr,
+        gridCount,
+        gridLevelsCount: this.strategyConfig.gridLevelsCount
+      });
+
       for (let i = -gridCount; i <= gridCount; i++) {
         const price = currentPrice + i * atr;
 
         // Skip grid levels that are too close to current price
-        if (Math.abs(price - currentPrice) < atr * 0.1) {
+        const priceDistance = Math.abs(price - currentPrice);
+        const threshold = atr * 0.1;
+        
+        if (priceDistance < threshold) {
+          this.logger.debug(`Skipping grid level too close to current price`, {
+            i,
+            price,
+            currentPrice,
+            priceDistance,
+            threshold
+          });
           continue;
         }
 
@@ -359,8 +376,17 @@ export class StrategyEngine {
     if (!state) return false;
 
     const { currentPrice, ema200 } = state;
-    const deviation = Math.abs(currentPrice - ema200) / ema200;
+    
+    // If EMA is 0 (insufficient data), skip EMA filter and allow trading
+    if (ema200 === 0) {
+      this.logger.debug(`EMA filter skipped for ${symbol} (insufficient data for EMA calculation)`, {
+        currentPrice,
+        ema200
+      });
+      return true;
+    }
 
+    const deviation = Math.abs(currentPrice - ema200) / ema200;
     const shouldTrade = deviation <= this.strategyConfig.emaDeviationThreshold;
 
     if (!shouldTrade) {
@@ -439,21 +465,21 @@ export class StrategyEngine {
     // Find grid levels to trade
     state.gridLevels.forEach(level => {
       if (level.status === 'pending') {
-        // Buy signal: current price is above grid level (price dipped to our buy level)
-        if (state.currentPrice <= level.price && level.price < state.currentPrice * 1.001) {
+        // Buy signal: current price has reached or gone below the buy level
+        if (state.currentPrice <= level.price && level.price < state.currentPrice + state.gridInterval) {
           const confidence = this.calculateSignalConfidence(symbol, 'buy', level);
 
           buySignals.push({
             type: 'buy',
             symbol,
-            price: level.price,
-            quantity: level.buySize / level.price, // Convert USDT to base currency
+            price: state.currentPrice, // Execute at current market price for immediate fill
+            quantity: level.buySize / state.currentPrice, // Convert USDT to base currency at current price
             gridLevel: level,
             confidence,
             timestamp: currentTime,
           });
         }
-
+      } else if (level.status === 'filled') {
         // Sell signal: we have a position and current price is above profit target
         if (level.sellSize > 0 && level.profitTarget && state.currentPrice >= level.profitTarget) {
           const confidence = this.calculateSignalConfidence(symbol, 'sell', level);
@@ -461,7 +487,7 @@ export class StrategyEngine {
           sellSignals.push({
             type: 'sell',
             symbol,
-            price: level.profitTarget,
+            price: state.currentPrice, // Execute at current market price
             quantity: level.sellSize,
             gridLevel: level,
             confidence,
@@ -471,9 +497,14 @@ export class StrategyEngine {
       }
     });
 
-    this.logger.debug(`Generated trade signals for ${symbol}`, {
+    this.logger.info(`Generated trade signals for ${symbol}`, {
       buySignals: buySignals.length,
       sellSignals: sellSignals.length,
+      currentPrice: state.currentPrice,
+      gridLevelsCount: state.gridLevels.length,
+      ema200: state.ema200,
+      shouldTradeBasedOnEMA: this.shouldTradeBasedOnEMA(symbol),
+      gridLevelsPrices: state.gridLevels.map(l => ({ price: l.price, status: l.status })).slice(0, 5) // First 5 levels
     });
 
     return { buy: buySignals, sell: sellSignals };
@@ -643,6 +674,47 @@ export class StrategyEngine {
     this.strategyStates.delete(symbol);
     this.metrics.delete(symbol);
     this.logger.info(`Strategy reset for ${symbol}`);
+  }
+
+  /**
+   * Update grid level after a buy order is filled
+   */
+  public updateGridLevelBuyFilled(symbol: string, gridPrice: number, quantity: number, fillPrice: number): void {
+    const state = this.strategyStates.get(symbol);
+    if (!state) return;
+
+    const gridLevel = state.gridLevels.find(level => Math.abs(level.price - gridPrice) < 0.01);
+    if (gridLevel) {
+      gridLevel.status = 'filled';
+      gridLevel.sellSize = quantity;
+      gridLevel.entryPrice = fillPrice;
+
+      this.logger.info(`Grid level buy filled for ${symbol}`, {
+        gridPrice,
+        quantity,
+        fillPrice,
+        profitTarget: gridLevel.profitTarget
+      });
+    }
+  }
+
+  /**
+   * Update grid level after a sell order is filled
+   */
+  public updateGridLevelSellFilled(symbol: string, gridPrice: number): void {
+    const state = this.strategyStates.get(symbol);
+    if (!state) return;
+
+    const gridLevel = state.gridLevels.find(level => Math.abs(level.price - gridPrice) < 0.01);
+    if (gridLevel) {
+      gridLevel.status = 'pending';
+      gridLevel.sellSize = 0;
+      delete gridLevel.entryPrice;
+
+      this.logger.info(`Grid level sell filled for ${symbol}`, {
+        gridPrice
+      });
+    }
   }
 
   /**
