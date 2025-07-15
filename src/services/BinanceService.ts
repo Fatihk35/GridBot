@@ -141,6 +141,8 @@ export class BinanceService {
   public async getHistoricalKlines(params: GetKlinesParams): Promise<BinanceKline[]> {
     await this.rateLimiter.waitForRateLimit('general');
 
+    this.logger.info('Requesting historical klines', { params });
+
     try {
       const response = await this.executeWithRetry(async () => {
         const requestParams: any = {
@@ -155,15 +157,35 @@ export class BinanceService {
           requestParams.endTime = params.endTime;
         }
 
+        this.logger.info('Calling Binance klines API', { 
+          symbol: params.symbol, 
+          interval: params.interval, 
+          requestParams 
+        });
+
         return await this.client.klines(params.symbol, params.interval, requestParams);
       });
 
       this.rateLimiter.recordRequest('general');
 
+      this.logger.info('Received response from Binance API', { 
+        dataLength: response.data?.length || 0,
+        firstFewItems: response.data?.slice(0, 2) || []
+      });
+
       // Validate and transform response
       const rawKlines = z.array(BinanceKlineSchema).parse(response.data);
 
-      return rawKlines.map(this.transformKlineData);
+      const filteredKlines = rawKlines
+        .map(this.transformKlineData)
+        .filter((kline): kline is BinanceKline => kline !== null);
+
+      this.logger.info('Filtered klines result', { 
+        originalCount: rawKlines.length, 
+        filteredCount: filteredKlines.length 
+      });
+
+      return filteredKlines;
     } catch (error) {
       const binanceError = this.handleBinanceError(error, 'getHistoricalKlines');
       throw binanceError;
@@ -645,19 +667,36 @@ export class BinanceService {
   /**
    * Transform raw kline data to typed format
    */
-  private transformKlineData(raw: BinanceKlineRaw): BinanceKline {
+  private transformKlineData(raw: BinanceKlineRaw): BinanceKline | null {
+    // Check if any required values are null or invalid
+    if (raw[1] === null || raw[2] === null || raw[3] === null || 
+        raw[4] === null || raw[5] === null) {
+      return null;
+    }
+
+    const open = parseFloat(raw[1]);
+    const high = parseFloat(raw[2]);
+    const low = parseFloat(raw[3]);
+    const close = parseFloat(raw[4]);
+    const volume = parseFloat(raw[5]);
+
+    // Check if any parsed values are NaN
+    if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close) || isNaN(volume)) {
+      return null;
+    }
+
     return {
       openTime: raw[0],
-      open: parseFloat(raw[1]),
-      high: parseFloat(raw[2]),
-      low: parseFloat(raw[3]),
-      close: parseFloat(raw[4]),
-      volume: parseFloat(raw[5]),
+      open,
+      high,
+      low,
+      close,
+      volume,
       closeTime: raw[6],
-      quoteAssetVolume: parseFloat(raw[7]),
-      numberOfTrades: raw[8],
-      takerBuyBaseAssetVolume: parseFloat(raw[9]),
-      takerBuyQuoteAssetVolume: parseFloat(raw[10]),
+      quoteAssetVolume: parseFloat(raw[7]) || 0,
+      numberOfTrades: raw[8] || 0,
+      takerBuyBaseAssetVolume: parseFloat(raw[9]) || 0,
+      takerBuyQuoteAssetVolume: parseFloat(raw[10]) || 0,
     };
   }
 

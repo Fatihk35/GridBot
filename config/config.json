@@ -23,7 +23,7 @@
     "emaDeviationThreshold": 0.05
   },
   "binanceSettings": {
-    "testnet": true,
+    "testnet": false,
     "commissionRate": 0.001
   },
   "logging": {

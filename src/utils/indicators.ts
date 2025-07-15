@@ -41,8 +41,13 @@ export const OHLCVSchema = z.object({
  * Validate OHLCV data array
  */
 export function validateOHLCVArray(data: OHLCV[]): void {
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new Error('OHLCV data must be a non-empty array');
+  if (!Array.isArray(data)) {
+    throw new Error('OHLCV data must be an array');
+  }
+  
+  // Allow empty arrays - indicators will handle them gracefully
+  if (data.length === 0) {
+    return;
   }
   
   data.forEach((item, index) => {
@@ -89,13 +94,14 @@ export function calculateTR(current: OHLCV, previous: OHLCV | null): number {
  * Calculate Average True Range (ATR)
  * @param data Array of OHLCV data
  * @param period ATR period (default: 14)
- * @returns ATR value
+ * @returns ATR value, or 0 if insufficient data
  */
 export function calculateATR(data: OHLCV[], period: number = 14): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data instead of throwing error
   if (data.length < period + 1) {
-    throw new Error(`Not enough data for ATR calculation. Need at least ${period + 1} bars.`);
+    return 0;
   }
   
   // Calculate True Range for each period
@@ -134,13 +140,14 @@ export function calculateATR(data: OHLCV[], period: number = 14): number {
  * @param data Array of OHLCV data
  * @param period EMA period
  * @param field Data field to use (default: 'close')
- * @returns EMA value
+ * @returns EMA value, or 0 if insufficient data
  */
 export function calculateEMA(data: OHLCV[], period: number, field: keyof OHLCV = 'close'): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data instead of throwing error
   if (data.length < period) {
-    throw new Error(`Not enough data for EMA calculation. Need at least ${period} bars.`);
+    return 0;
   }
   
   // Calculate multiplier: 2 / (period + 1)
@@ -168,13 +175,14 @@ export function calculateEMA(data: OHLCV[], period: number, field: keyof OHLCV =
  * @param data Array of OHLCV data
  * @param period SMA period
  * @param field Data field to use (default: 'close')
- * @returns SMA value
+ * @returns SMA value, or 0 if insufficient data
  */
 export function calculateSMA(data: OHLCV[], period: number, field: keyof OHLCV = 'close'): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data instead of throwing error
   if (data.length < period) {
-    throw new Error(`Not enough data for SMA calculation. Need at least ${period} bars.`);
+    return 0;
   }
   
   const recentValues = data.slice(-period).map(bar => bar[field]);
@@ -185,13 +193,14 @@ export function calculateSMA(data: OHLCV[], period: number, field: keyof OHLCV =
  * Calculate daily bar difference average
  * @param data Array of OHLCV data
  * @param barCount Number of bars to analyze
- * @returns Average bar difference
+ * @returns Average bar difference, or 0 if insufficient data
  */
 export function calculateDailyBarDiffAverage(data: OHLCV[], barCount: number): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data instead of throwing error
   if (data.length < barCount) {
-    throw new Error(`Not enough data for bar difference calculation. Need at least ${barCount} bars.`);
+    return 0;
   }
   
   // Get the last N bars
@@ -211,13 +220,14 @@ export function calculateDailyBarDiffAverage(data: OHLCV[], barCount: number): n
  * @param data Array of OHLCV data
  * @param barCount Number of bars to analyze
  * @param volatilityThreshold Minimum percentage change to consider a bar volatile
- * @returns Ratio of volatile bars (0-1)
+ * @returns Ratio of volatile bars (0-1), or 0 if insufficient data
  */
 export function calculateVolatileBarRatio(data: OHLCV[], barCount: number, volatilityThreshold: number): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data instead of throwing error
   if (data.length < barCount) {
-    throw new Error(`Not enough data for volatility calculation. Need at least ${barCount} bars.`);
+    return 0;
   }
   
   // Get the last N bars
@@ -271,8 +281,9 @@ export function calculateBollingerBands(
 ): { upper: number; middle: number; lower: number } {
   validateOHLCVArray(data);
   
+  // Return default values if insufficient data
   if (data.length < period) {
-    throw new Error(`Not enough data for Bollinger Bands calculation. Need at least ${period} bars.`);
+    return { upper: 0, middle: 0, lower: 0 };
   }
 
   const sma = calculateSMA(data, period);
@@ -301,8 +312,9 @@ export function calculateBollingerBands(
 export function calculateRSI(data: OHLCV[], period: number = 14): number {
   validateOHLCVArray(data);
   
+  // Return 50 (neutral) if insufficient data
   if (data.length < period + 1) {
-    throw new Error(`Not enough data for RSI calculation. Need at least ${period + 1} bars.`);
+    return 50;
   }
 
   const gains: number[] = [];
@@ -344,8 +356,9 @@ export function calculateRSI(data: OHLCV[], period: number = 14): number {
 export function calculateVolatility(data: OHLCV[], period: number): number {
   validateOHLCVArray(data);
   
+  // Return 0 if insufficient data
   if (data.length < period + 1) {
-    throw new Error(`Not enough data for volatility calculation. Need at least ${period + 1} bars.`);
+    return 0;
   }
 
   const returns: number[] = [];

@@ -562,7 +562,8 @@ export class Backtester {
     }
 
     if (minTimestamp === Infinity) {
-      throw new Error('No historical data available');
+      this.logger.warn('No historical data available for backtest. Skipping simulation.');
+      return; // Exit early but don't throw error
     }
 
     // Create time-aligned data iterators

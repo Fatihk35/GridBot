@@ -154,28 +154,23 @@ export class StrategyEngine {
     try {
       this.logger.info(`Initializing strategy for ${symbol}`, {
         dataPoints: historicalData.length,
+        requiredPeriods: Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1
       });
 
-      if (
-        historicalData.length <
-        Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1
-      ) {
-        throw new Error(
-          `Insufficient historical data for ${symbol}. Need at least ${Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1} periods`
-        );
-      }
-
-      // Calculate initial indicators
+      // Calculate initial indicators - they will return 0 if insufficient data
       const atr = this.calculateGridInterval(
         historicalData,
         this.strategyConfig.gridIntervalMethod
       );
       const ema200 = calculateEMA(convertToOHLCV(historicalData), this.strategyConfig.emaPeriod);
-      const currentPrice = historicalData[historicalData.length - 1]?.close;
+      const currentPrice = historicalData[historicalData.length - 1]?.close || 0;
 
-      if (!currentPrice) {
-        throw new Error(`Invalid current price for ${symbol}`);
-      }
+      this.logger.info(`Strategy indicators calculated for ${symbol}`, {
+        atr,
+        ema200,
+        currentPrice,
+        hasData: historicalData.length > 0
+      });
 
       // Find symbol configuration
       const symbolConfig = this.config.symbols.find(s => s.pair === symbol);
