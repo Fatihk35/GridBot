@@ -36,14 +36,26 @@ const ApiKeysConfigSchema = z.object({
  * Zod schema for strategy settings configuration validation
  */
 const StrategySettingsConfigSchema = z.object({
-  barCountForVolatility: z
-    .number()
-    .int()
-    .positive('Bar count for volatility must be a positive integer'),
-  minVolatilityPercentage: z.number().positive('Minimum volatility percentage must be positive'),
-  minVolatileBarRatio: z.number().positive('Minimum volatile bar ratio must be positive'),
-  emaPeriod: z.number().int().positive('EMA period must be a positive integer'),
-  emaDeviationThreshold: z.number().positive('EMA deviation threshold must be positive'),
+  gridLevelsCount: z.number().int().min(5).max(50).optional().default(20),
+  gridIntervalMethod: z.enum(['ATR', 'DailyBarDiff']).optional().default('DailyBarDiff'),
+  atrPeriod: z.number().int().min(5).max(50).optional().default(14),
+  emaPeriod: z.number().int().positive('EMA period must be a positive integer').optional().default(200),
+  emaDeviationThreshold: z.number().min(0.001).max(0.5).optional().default(0.01),
+  minVolatilityPercentage: z.number().min(0.001).max(0.1).optional().default(0.003),
+  minVolatileBarRatio: z.number().min(0.1).max(1).optional().default(0.51), // %51 kriteri - config'den değiştirilebilir
+  barCountForVolatility: z.number().int().min(10).max(1000).optional().default(500),
+  profitTargetMultiplier: z.number().min(1).max(10).optional().default(2),
+  dcaMultipliers: z
+    .object({
+      standard: z.number().optional().default(1),
+      moderate: z.number().optional().default(3),
+      aggressive: z.number().optional().default(4),
+    })
+    .optional()
+    .default({}),
+  gridRecalculationIntervalHours: z.number().min(1).max(168).optional().default(48),
+  baseGridSizeUSDT: z.number().min(100).max(10000).optional().default(1000),
+  commissionRate: z.number().min(0).max(0.01).optional().default(0.001),
 });
 
 /**
@@ -190,11 +202,23 @@ export class ConfigValidator {
         },
       ],
       strategySettings: {
-        barCountForVolatility: 30,
-        minVolatilityPercentage: 0.02,
-        minVolatileBarRatio: 0.6,
+        gridLevelsCount: 20,
+        gridIntervalMethod: 'DailyBarDiff' as const,
+        atrPeriod: 14,
         emaPeriod: 200,
-        emaDeviationThreshold: 0.05,
+        emaDeviationThreshold: 0.01,
+        minVolatilityPercentage: 0.003,
+        minVolatileBarRatio: 0.51,
+        barCountForVolatility: 500,
+        profitTargetMultiplier: 2,
+        dcaMultipliers: {
+          standard: 1,
+          moderate: 3,
+          aggressive: 4,
+        },
+        gridRecalculationIntervalHours: 48,
+        baseGridSizeUSDT: 1000,
+        commissionRate: 0.001,
       },
       binanceSettings: {
         testnet: true,

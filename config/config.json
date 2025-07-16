@@ -16,11 +16,23 @@
     "binanceSecretKey": "your_binance_secret_key_here"
   },
   "strategySettings": {
-    "barCountForVolatility": 30,
-    "minVolatilityPercentage": 0.02,
-    "minVolatileBarRatio": 0.6,
+    "gridLevelsCount": 20,
+    "gridIntervalMethod": "DailyBarDiff",
+    "atrPeriod": 14,
     "emaPeriod": 200,
-    "emaDeviationThreshold": 0.05
+    "emaDeviationThreshold": 0.01,
+    "minVolatilityPercentage": 0.003,
+    "minVolatileBarRatio": 0.51,
+    "barCountForVolatility": 500,
+    "profitTargetMultiplier": 2,
+    "dcaMultipliers": {
+      "standard": 1,
+      "moderate": 3,
+      "aggressive": 4
+    },
+    "gridRecalculationIntervalHours": 48,
+    "baseGridSizeUSDT": 1000,
+    "commissionRate": 0.001
   },
   "binanceSettings": {
     "testnet": false,

@@ -75,7 +75,7 @@ export interface StrategyState {
   >;
   /** Grid interval size */
   gridInterval: number;
-  /** Base grid size in USDT */
+  /** Base grid size in USDT - Sabit işlem tutarı (varsayılan 1000 USDT) */
   baseGridSize: number;
 }
 
@@ -97,6 +97,16 @@ export interface StrategyMetrics {
   maxDrawdown: number;
   /** Sharpe ratio */
   sharpeRatio: number;
+  /** Symbol eligibility status */
+  isEligibleForTrading: boolean;
+  /** Volatility analysis result */
+  volatilityAnalysis?: {
+    volatileBarRatio: number;
+    requiredRatio: number;
+    volatileBars: number;
+    totalBars: number;
+    reason?: string;
+  };
 }
 
 /**
@@ -104,22 +114,25 @@ export interface StrategyMetrics {
  */
 const StrategyConfigSchema = z.object({
   gridLevelsCount: z.number().min(5).max(50).default(20),
-  gridIntervalMethod: z.enum(['ATR', 'DailyBarDiff']).default('ATR'),
+  gridIntervalMethod: z.enum(['ATR', 'DailyBarDiff']).default('DailyBarDiff'),
   atrPeriod: z.number().min(5).max(50).default(14),
   emaPeriod: z.number().min(50).max(500).default(200),
-  emaDeviationThreshold: z.number().min(0.01).max(0.5).default(0.1),
-  minVolatilityPercentage: z.number().min(0.001).max(0.1).default(0.01),
-  minVolatileBarRatio: z.number().min(0.1).max(1).default(0.3),
-  barCountForVolatility: z.number().min(10).max(100).default(24),
-  profitTargetMultiplier: z.number().min(1).max(10).default(4),
+  emaDeviationThreshold: z.number().min(0.001).max(0.5).default(0.01), // %1 EMA eşiği
+  minVolatilityPercentage: z.number().min(0.001).max(0.1).default(0.003), // %0.30 volatilite eşiği
+  minVolatileBarRatio: z.number().min(0.1).max(1).default(0.51), // %51 volatil bar oranı
+  barCountForVolatility: z.number().min(10).max(1000).default(500), // 500 bar analizi
+  profitTargetMultiplier: z.number().min(1).max(10).default(2), // 2 grid kar hedefi (komisyon dahil 4 grid toplam)
   dcaMultipliers: z
     .object({
-      standard: z.number().default(1),
-      moderate: z.number().default(3),
-      aggressive: z.number().default(4),
+      standard: z.number().default(1), // %80 - 1000 TL
+      moderate: z.number().default(3), // %10 - 3000 TL  
+      aggressive: z.number().default(4), // %10 - 4000 TL
     })
     .default({}),
-  gridRecalculationIntervalHours: z.number().min(1).max(168).default(48),
+  gridRecalculationIntervalHours: z.number().min(1).max(168).default(48), // 2 günde bir güncelleme
+  // Yeni özellikler
+  baseGridSizeUSDT: z.number().min(100).max(10000).default(1000), // Sabit 1000 TL/USDT işlem tutarı
+  commissionRate: z.number().min(0).max(0.01).default(0.001), // %0.1 komisyon oranı
 });
 
 type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
@@ -138,12 +151,20 @@ export class StrategyEngine {
     this.config = config;
     this.logger = Logger.getInstance();
 
+    // Config'den strategy settings'i al ve strategyConfig ile birleştir
+    const configStrategySettings = this.config.strategySettings || {};
+    const mergedStrategyConfig = {
+      ...configStrategySettings,
+      ...strategyConfig, // strategyConfig parametresi öncelikli
+    };
+
     // Validate and set strategy configuration
-    this.strategyConfig = StrategyConfigSchema.parse(strategyConfig || {});
+    this.strategyConfig = StrategyConfigSchema.parse(mergedStrategyConfig);
 
     this.logger.info('StrategyEngine initialized', {
       strategyConfig: this.strategyConfig,
       symbols: this.config.symbols.map(s => s.pair),
+      configSource: 'merged from config.json and constructor params',
     });
   }
 
@@ -189,12 +210,12 @@ export class StrategyEngine {
         totalProfit: 0,
         openPositions: new Map(),
         gridInterval: atr,
-        baseGridSize: symbolConfig.gridSize || 100, // Default 100 USDT per grid
+        baseGridSize: this.strategyConfig.baseGridSizeUSDT, // Strateji konfigürasyonundan sabit tutar
       };
 
       this.strategyStates.set(symbol, strategyState);
 
-      // Initialize metrics
+      // Initialize metrics  
       this.metrics.set(symbol, {
         totalTrades: 0,
         winningTrades: 0,
@@ -203,10 +224,18 @@ export class StrategyEngine {
         avgProfitPerTrade: 0,
         maxDrawdown: 0,
         sharpeRatio: 0,
+        isEligibleForTrading: true, // Başlangıçta true, sonra kontrol edilecek
       });
 
       // Calculate initial grid levels
       this.recalculateGridLevels(symbol);
+
+      // Volatilite kontrolü yap ve metrics'i güncelle
+      const isEligible = this.isSymbolSuitableForTrading(symbol, historicalData);
+      const metrics = this.metrics.get(symbol);
+      if (metrics) {
+        metrics.isEligibleForTrading = isEligible;
+      }
 
       this.logger.info(`Strategy initialized for ${symbol}`, {
         currentPrice,
@@ -214,6 +243,7 @@ export class StrategyEngine {
         atr,
         gridInterval: atr,
         gridLevelsCount: strategyState.gridLevels.length,
+        isEligibleForTrading: isEligible,
       });
     } catch (error) {
       this.logger.error(`Failed to initialize strategy for ${symbol}`, { error });
@@ -232,39 +262,66 @@ export class StrategyEngine {
       if (method === 'ATR') {
         return calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
       } else {
-        // Daily Bar Difference method
+        // Daily Bar Difference method - İyileştirilmiş %51 kriteri
         const barCount = this.strategyConfig.barCountForVolatility;
         const bars = historicalData.slice(-barCount);
 
         if (bars.length < barCount) {
-          throw new Error('Insufficient data for Daily Bar Difference calculation');
+          this.logger.warn('Insufficient data for Daily Bar Difference calculation', {
+            available: bars.length,
+            required: barCount
+          });
+          return 0;
         }
 
+        // Önce volatil barları belirle
+        const volatileBars: CandlestickData[] = [];
         let totalDiff = 0;
-        let volatileBarCount = 0;
 
         bars.forEach(bar => {
           const diff = Math.abs(bar.close - bar.open);
+          const volatilityPercent = diff / bar.open;
+          
           totalDiff += diff;
 
-          if (diff / bar.open > this.strategyConfig.minVolatilityPercentage) {
-            volatileBarCount++;
+          // %0.30'dan fazla değişim gösteren barları volatil olarak işaretle
+          if (volatilityPercent > this.strategyConfig.minVolatilityPercentage) {
+            volatileBars.push(bar);
           }
         });
 
-        const avgBarDiff = totalDiff / barCount;
-        const volatileBarRatio = volatileBarCount / barCount;
+        const volatileBarRatio = volatileBars.length / bars.length;
 
-        // Check if volatility criteria is met
+        // %51 volatil bar kriteri kontrolü
         if (volatileBarRatio < this.strategyConfig.minVolatileBarRatio) {
-          this.logger.warn('Insufficient volatility detected', {
-            volatileBarRatio,
-            required: this.strategyConfig.minVolatileBarRatio,
+          this.logger.warn('Insufficient volatility detected - %51 kriteri karşılanmadı', {
+            volatileBarRatio: (volatileBarRatio * 100).toFixed(2) + '%',
+            required: (this.strategyConfig.minVolatileBarRatio * 100).toFixed(2) + '%',
+            volatileBars: volatileBars.length,
+            totalBars: bars.length
           });
-          return 0; // Not enough volatility
+
+          // Bu durumu metrics'e kaydet
+          this.updateVolatilityAnalysisInMetrics(historicalData, volatileBarRatio, volatileBars.length, bars.length, false);
+
+          return 0; // İşlem yapma
         }
 
-        return avgBarDiff / 4; // Grid interval is 1/4 of average bar difference
+        // Başarılı volatilite analizini metrics'e kaydet
+        this.updateVolatilityAnalysisInMetrics(historicalData, volatileBarRatio, volatileBars.length, bars.length, true);
+
+        // Sadece volatil barların ortalamasını al
+        const avgVolatileDiff = volatileBars.reduce((sum, bar) => {
+          return sum + Math.abs(bar.close - bar.open);
+        }, 0) / volatileBars.length;
+
+        this.logger.info('Volatilite analizi başarılı', {
+          volatileBarRatio: (volatileBarRatio * 100).toFixed(2) + '%',
+          avgVolatileDiff,
+          gridInterval: avgVolatileDiff / 4
+        });
+
+        return avgVolatileDiff / 4; // Grid aralığı volatil barların ortalamasının 1/4'ü
       }
     } catch (error) {
       this.logger.error('Failed to calculate grid interval', { method, error });
@@ -330,17 +387,20 @@ export class StrategyEngine {
           continue;
         }
 
-        // Determine position size with DCA logic
+        // Determine position size with DCA logic - %80-%10-%10 dağılımı
         let buySize = state.baseGridSize;
+        const totalGrids = this.strategyConfig.gridLevelsCount;
+        const currentGridPosition = (i + gridCount) / (gridCount * 2); // 0-1 arası normalize pozisyon
 
-        // Apply DCA logic based on distance from current price
+        // DCA dağılımı: Aşağıdaki seviyeler için daha büyük tutarlar
         if (i <= -Math.floor(gridCount * 0.8)) {
-          // Bottom 20% of grid levels
+          // Alt %10 - en agresif alım (4000 TL)
           buySize = state.baseGridSize * this.strategyConfig.dcaMultipliers.aggressive;
         } else if (i <= -Math.floor(gridCount * 0.5)) {
-          // Next 30% of grid levels
+          // Orta %10 - orta agresif alım (3000 TL)
           buySize = state.baseGridSize * this.strategyConfig.dcaMultipliers.moderate;
         }
+        // Diğer %80 - standart alım (1000 TL)
 
         const gridLevel: GridLevel = {
           price: Number(price.toFixed(symbolConfig.pricePrecision || 8)),
@@ -453,6 +513,15 @@ export class StrategyEngine {
       return { buy: [], sell: [] };
     }
 
+    // %51 volatilite kriterini kontrol et
+    const metrics = this.metrics.get(symbol);
+    if (metrics && !metrics.isEligibleForTrading) {
+      this.logger.debug(`Trading signals skipped for ${symbol} - does not meet %51 volatility criteria`, {
+        volatilityAnalysis: metrics.volatilityAnalysis
+      });
+      return { buy: [], sell: [] };
+    }
+
     // Skip trading if outside EMA threshold
     if (!this.shouldTradeBasedOnEMA(symbol)) {
       return { buy: [], sell: [] };
@@ -545,9 +614,13 @@ export class StrategyEngine {
    * Calculate profit target for a given entry price
    */
   public calculateProfitTarget(entryPrice: number, gridInterval: number): number {
-    // Target profit is configured multiplier times the grid interval
-    // This accounts for commissions and provides net profit
-    return entryPrice + this.strategyConfig.profitTargetMultiplier * gridInterval;
+    // Komisyon dahil kar hedefi: 2 grid kar + 2 grid komisyon = toplam 4 grid
+    // Ancak kar hedefi olarak sadece 2 grid set ediyoruz (komisyon hesabı ayrıca yapılacak)
+    const commissionGrids = 2; // Komisyon için 2 grid
+    const profitGrids = this.strategyConfig.profitTargetMultiplier; // Kar için 2 grid (config'den)
+    
+    // Toplam hedef: entry price + (kar + komisyon) * grid interval
+    return entryPrice + (profitGrids + commissionGrids) * gridInterval;
   }
 
   /**
@@ -610,14 +683,20 @@ export class StrategyEngine {
       return;
     }
 
-    // Calculate profit/loss
-    const profit = (sellPrice - position.entryPrice) * sellQuantity;
+    // Komisyon hesaplama
+    const buyCommission = position.entryPrice * position.quantity * this.strategyConfig.commissionRate;
+    const sellCommission = sellPrice * sellQuantity * this.strategyConfig.commissionRate;
+    const totalCommission = buyCommission + sellCommission;
+
+    // Net kar/zarar hesaplama (komisyon dahil)
+    const grossProfit = (sellPrice - position.entryPrice) * sellQuantity;
+    const netProfit = grossProfit - totalCommission;
 
     // Update metrics
     metrics.totalTrades++;
-    metrics.totalProfit += profit;
+    metrics.totalProfit += netProfit;
 
-    if (profit > 0) {
+    if (netProfit > 0) {
       metrics.winningTrades++;
     }
 
@@ -625,7 +704,7 @@ export class StrategyEngine {
     metrics.avgProfitPerTrade = metrics.totalProfit / metrics.totalTrades;
 
     // Update strategy state
-    state.totalProfit += profit;
+    state.totalProfit += netProfit;
     state.openPositions.delete(gridIndex);
 
     // Reset grid level
@@ -639,7 +718,9 @@ export class StrategyEngine {
 
     this.logger.info(`Trade completed for ${symbol}`, {
       gridIndex,
-      profit,
+      grossProfit,
+      totalCommission,
+      netProfit,
       sellPrice,
       sellQuantity,
       totalProfit: state.totalProfit,
@@ -722,5 +803,177 @@ export class StrategyEngine {
    */
   public getStrategyConfig(): StrategyConfig {
     return { ...this.strategyConfig };
+  }
+
+  /**
+   * Hisse seçimi için tarama kriteri - %51 volatilite kontrolü
+   * @param symbol - Analiz edilecek hisse sembolü
+   * @param historicalData - Son 500 adet 1 dakikalık bar verisi
+   * @returns boolean - Hisse işlem için uygun mu?
+   */
+  public isSymbolSuitableForTrading(symbol: string, historicalData: CandlestickData[]): boolean {
+    try {
+      const barCount = this.strategyConfig.barCountForVolatility;
+      const bars = historicalData.slice(-barCount);
+
+      if (bars.length < barCount) {
+        this.logger.warn(`Insufficient data for symbol screening: ${symbol}`, {
+          available: bars.length,
+          required: barCount
+        });
+        return false;
+      }
+
+      let volatileBarCount = 0;
+
+      bars.forEach(bar => {
+        const diff = Math.abs(bar.close - bar.open);
+        const volatilityPercent = diff / bar.open;
+        
+        // %0.30'dan fazla değişim gösteren barları say
+        if (volatilityPercent > this.strategyConfig.minVolatilityPercentage) {
+          volatileBarCount++;
+        }
+      });
+
+      const volatileBarRatio = volatileBarCount / bars.length;
+      const isEligible = volatileBarRatio >= this.strategyConfig.minVolatileBarRatio;
+
+      this.logger.info(`Symbol screening result for ${symbol}`, {
+        volatileBarRatio: (volatileBarRatio * 100).toFixed(2) + '%',
+        required: (this.strategyConfig.minVolatileBarRatio * 100).toFixed(2) + '%',
+        volatileBars: volatileBarCount,
+        totalBars: bars.length,
+        isEligible
+      });
+
+      return isEligible;
+
+    } catch (error) {
+      this.logger.error(`Failed to screen symbol ${symbol}`, { error });
+      return false;
+    }
+  }
+
+  /**
+   * Komisyon hesaplama yardımcı fonksiyonu
+   * @param price - İşlem fiyatı
+   * @param quantity - İşlem miktarı
+   * @returns Komisyon tutarı
+   */
+  public calculateCommission(price: number, quantity: number): number {
+    return price * quantity * this.strategyConfig.commissionRate;
+  }
+
+  /**
+   * Net kar hesaplama (komisyon dahil)
+   * @param entryPrice - Giriş fiyatı
+   * @param exitPrice - Çıkış fiyatı
+   * @param quantity - Miktar
+   * @returns Net kar/zarar
+   */
+  public calculateNetProfit(entryPrice: number, exitPrice: number, quantity: number): number {
+    const grossProfit = (exitPrice - entryPrice) * quantity;
+    const buyCommission = this.calculateCommission(entryPrice, quantity);
+    const sellCommission = this.calculateCommission(exitPrice, quantity);
+    return grossProfit - buyCommission - sellCommission;
+  }
+
+  /**
+   * Volatilite analizi sonucunu metrics'e kaydet
+   * @param historicalData - Kullanılan historical data (symbol çıkarımı için)
+   * @param volatileBarRatio - Volatil bar oranı
+   * @param volatileBars - Volatil bar sayısı
+   * @param totalBars - Toplam bar sayısı
+   * @param isEligible - %51 kriterini karşılıyor mu?
+   */
+  private updateVolatilityAnalysisInMetrics(
+    historicalData: CandlestickData[],
+    volatileBarRatio: number,
+    volatileBars: number,
+    totalBars: number,
+    isEligible: boolean
+  ): void {
+    // Son işlenen symbol'ü bulmak için strategyStates'i kontrol et
+    // Bu fonksiyon calculateGridInterval içinden çağrıldığı için aktif symbol'ü bulmamız gerek
+    for (const [symbol, metrics] of this.metrics.entries()) {
+      // Son güncellenen symbol olması muhtemel
+      metrics.isEligibleForTrading = isEligible;
+      metrics.volatilityAnalysis = {
+        volatileBarRatio,
+        requiredRatio: this.strategyConfig.minVolatileBarRatio,
+        volatileBars,
+        totalBars,
+        reason: isEligible 
+          ? 'Symbol meets %51 volatility criteria and is eligible for trading'
+          : `Symbol does not meet %51 volatility criteria (${(volatileBarRatio * 100).toFixed(2)}% < ${(this.strategyConfig.minVolatileBarRatio * 100).toFixed(2)}%). Trading disabled.`
+      };
+      break; // Sadece en son işlenen symbol için güncelle
+    }
+  }
+
+  /**
+   * %51 kriteri karşılamayan hisselerin raporunu döndür
+   * @returns Kriteri karşılamayan hisselerin listesi ve detayları
+   */
+  public getIneligibleSymbolsReport(): Array<{
+    symbol: string;
+    reason: string;
+    volatilityAnalysis: {
+      volatileBarRatio: number;
+      requiredRatio: number;
+      volatileBars: number;
+      totalBars: number;
+    };
+  }> {
+    const ineligibleSymbols: Array<{
+      symbol: string;
+      reason: string;
+      volatilityAnalysis: {
+        volatileBarRatio: number;
+        requiredRatio: number;
+        volatileBars: number;
+        totalBars: number;
+      };
+    }> = [];
+
+    for (const [symbol, metrics] of this.metrics.entries()) {
+      if (!metrics.isEligibleForTrading && metrics.volatilityAnalysis) {
+        ineligibleSymbols.push({
+          symbol,
+          reason: metrics.volatilityAnalysis.reason || 'Unknown reason',
+          volatilityAnalysis: {
+            volatileBarRatio: metrics.volatilityAnalysis.volatileBarRatio,
+            requiredRatio: metrics.volatilityAnalysis.requiredRatio,
+            volatileBars: metrics.volatilityAnalysis.volatileBars,
+            totalBars: metrics.volatilityAnalysis.totalBars,
+          }
+        });
+      }
+    }
+
+    return ineligibleSymbols;
+  }
+
+  /**
+   * Sembol için backtest eligibility kontrolü
+   * @param symbol - Kontrol edilecek sembol
+   * @returns Backtest yapılabilir mi?
+   */
+  public canRunBacktest(symbol: string): boolean {
+    const metrics = this.metrics.get(symbol);
+    if (!metrics) {
+      this.logger.warn(`Metrics not found for symbol ${symbol}. Cannot run backtest.`);
+      return false;
+    }
+
+    if (!metrics.isEligibleForTrading) {
+      this.logger.warn(`Symbol ${symbol} does not meet %51 volatility criteria. Backtest skipped.`, {
+        volatilityAnalysis: metrics.volatilityAnalysis
+      });
+      return false;
+    }
+
+    return true;
   }
 }
