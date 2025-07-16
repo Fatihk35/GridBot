@@ -297,24 +297,44 @@ export class StrategyEngine {
   /**
    * Calculate grid interval based on selected method
    */
+  /**
+   * Calculate grid interval based on selected method
+   */
   public calculateGridInterval(
     historicalData: CandlestickData[],
     method: 'ATR' | 'DailyBarDiff'
   ): number {
     try {
+      this.logger.debug(`Calculating grid interval using ${method} method`, {
+        dataPoints: historicalData.length,
+        method
+      });
+
       // Check data sufficiency for requested method
       const methodCheck = this.checkDataSufficiency(historicalData, method);
       
       if (method === 'ATR') {
         if (!methodCheck.sufficient) {
-          this.logger.debug('Insufficient data for ATR calculation', methodCheck);
+          this.logger.warn('Insufficient data for ATR calculation', {
+            available: methodCheck.available,
+            required: methodCheck.required,
+            method: 'ATR'
+          });
           return 0;
         }
-        return calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
+        
+        const atrValue = calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
+        this.logger.debug('ATR grid interval calculated', { 
+          atrValue, 
+          atrPeriod: this.strategyConfig.atrPeriod,
+          dataPoints: historicalData.length
+        });
+        return atrValue;
+        
       } else {
         // Daily Bar Difference method - İyileştirilmiş %51 kriteri
         if (!methodCheck.sufficient) {
-          this.logger.debug('Insufficient data for Daily Bar Difference calculation, attempting ATR fallback', {
+          this.logger.info('Insufficient data for Daily Bar Difference calculation, attempting ATR fallback', {
             available: methodCheck.available,
             required: methodCheck.required,
             method: 'DailyBarDiff'
@@ -324,19 +344,26 @@ export class StrategyEngine {
           const atrCheck = this.checkDataSufficiency(historicalData, 'ATR');
           if (atrCheck.sufficient) {
             const atrValue = calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
-            this.logger.debug('Grid interval calculated using ATR fallback', { 
+            this.logger.info('Grid interval calculated using ATR fallback', { 
               atrValue,
               originalMethod: 'DailyBarDiff',
               fallbackMethod: 'ATR',
               availableData: methodCheck.available,
-              requiredForDailyBarDiff: methodCheck.required
+              requiredForDailyBarDiff: methodCheck.required,
+              requiredForATR: atrCheck.required
             });
             return atrValue;
           } else {
-            this.logger.warn('Insufficient data for both calculation methods', {
-              dailyBarDiff: methodCheck,
-              atr: atrCheck,
-              minimumRequiredData: Math.max(methodCheck.required, atrCheck.required)
+            this.logger.error('Insufficient data for both calculation methods', {
+              dailyBarDiff: {
+                available: methodCheck.available,
+                required: methodCheck.required
+              },
+              atr: {
+                available: atrCheck.available,
+                required: atrCheck.required
+              },
+              recommendedMinimum: Math.max(methodCheck.required, atrCheck.required)
             });
             return 0;
           }
@@ -344,6 +371,12 @@ export class StrategyEngine {
 
         const barCount = this.strategyConfig.barCountForVolatility;
         const bars = historicalData.slice(-barCount);
+
+        this.logger.debug('Analyzing volatility for Daily Bar Difference', {
+          totalBars: bars.length,
+          requiredVolatileRatio: this.strategyConfig.minVolatileBarRatio,
+          minVolatilityPercentage: this.strategyConfig.minVolatilityPercentage
+        });
 
         // Önce volatil barları belirle
         const volatileBars: CandlestickData[] = [];
@@ -365,11 +398,12 @@ export class StrategyEngine {
 
         // %51 volatil bar kriteri kontrolü
         if (volatileBarRatio < this.strategyConfig.minVolatileBarRatio) {
-          this.logger.warn('Insufficient volatility detected - %51 kriteri karşılanmadı', {
+          this.logger.warn('Insufficient volatility detected - %51 criteria not met', {
             volatileBarRatio: (volatileBarRatio * 100).toFixed(2) + '%',
             required: (this.strategyConfig.minVolatileBarRatio * 100).toFixed(2) + '%',
             volatileBars: volatileBars.length,
-            totalBars: bars.length
+            totalBars: bars.length,
+            minVolatilityThreshold: (this.strategyConfig.minVolatilityPercentage * 100).toFixed(2) + '%'
           });
 
           // Bu durumu metrics'e kaydet
@@ -386,16 +420,24 @@ export class StrategyEngine {
           return sum + Math.abs(bar.close - bar.open);
         }, 0) / volatileBars.length;
 
-        this.logger.info('Volatilite analizi başarılı', {
+        const gridInterval = avgVolatileDiff / 4; // Grid aralığı volatil barların ortalamasının 1/4'ü
+
+        this.logger.info('Volatility analysis successful', {
           volatileBarRatio: (volatileBarRatio * 100).toFixed(2) + '%',
-          avgVolatileDiff,
-          gridInterval: avgVolatileDiff / 4
+          volatileBarsCount: volatileBars.length,
+          totalBarsAnalyzed: bars.length,
+          avgVolatileDiff: avgVolatileDiff.toFixed(8),
+          gridInterval: gridInterval.toFixed(8)
         });
 
-        return avgVolatileDiff / 4; // Grid aralığı volatil barların ortalamasının 1/4'ü
+        return gridInterval;
       }
     } catch (error) {
-      this.logger.error('Failed to calculate grid interval', { method, error });
+      this.logger.error('Failed to calculate grid interval', { 
+        method, 
+        dataPoints: historicalData.length,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }

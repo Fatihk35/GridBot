@@ -849,20 +849,31 @@ export class GridBotApp extends EventEmitter {
       throw new Error('Required services not initialized');
     }
 
+    // Get minimum data requirements from strategy engine
+    const dataRequirements = this.strategyEngine.getMinimumDataRequirements();
+    
+    this.logger.info('Strategy data requirements determined', {
+      atr: dataRequirements.atr,
+      dailyBarDiff: dataRequirements.dailyBarDiff,
+      ema: dataRequirements.ema,
+      recommended: dataRequirements.recommended
+    });
+
     for (const symbolConfig of this.config.symbols) {
       const symbol = symbolConfig.pair;
       
       try {
-        // Get minimum data requirements from strategy engine
-        const requiredBars = Math.max(200, 500); // Need at least 200 for EMA, 500 for volatility analysis
+        // Use recommended amount to ensure all calculations work properly
+        const requiredBars = dataRequirements.recommended;
         
         this.logger.info(`Fetching ${requiredBars} initial bars for ${symbol}...`);
         
-        const historicalData = await this.binanceService.getHistoricalKlines({
-          symbol,
-          interval: (this.config.strategySettings.timeframe || '1m') as any,
-          limit: requiredBars
-        });
+        // Fetch historical data with proper amount
+        const historicalData = await this.fetchSufficientHistoricalData(
+          symbol, 
+          requiredBars,
+          this.config.strategySettings.timeframe || '1m'
+        );
 
         if (historicalData.length > 0) {
           // Convert BinanceKline[] to CandlestickData[]
@@ -875,9 +886,24 @@ export class GridBotApp extends EventEmitter {
             timestamp: kline.openTime
           }));
 
+          // Validate data sufficiency before initializing strategy
+          const dataValidation = this.strategyEngine.validateHistoricalDataSufficiency(candlestickData);
+          
+          if (!dataValidation.sufficient) {
+            this.logger.warn(`Insufficient data for full strategy initialization for ${symbol}`, {
+              available: dataValidation.available,
+              requirements: dataValidation.requirements,
+              missingFor: dataValidation.missingFor
+            });
+          }
+
           // Initialize strategy with the converted data
           this.strategyEngine.initializeStrategy(symbol, candlestickData);
-          this.logger.info(`Strategy initialized for ${symbol} with ${candlestickData.length} bars`);
+          this.logger.info(`Strategy initialized for ${symbol}`, {
+            barsProvided: candlestickData.length,
+            dataSufficient: dataValidation.sufficient,
+            missingFor: dataValidation.missingFor
+          });
         } else {
           this.logger.warn(`No historical data available for ${symbol}`);
         }
@@ -890,6 +916,76 @@ export class GridBotApp extends EventEmitter {
         // Continue with other symbols instead of failing completely
       }
     }
+  }
+
+  /**
+   * Fetch sufficient historical data with chunking if needed
+   */
+  private async fetchSufficientHistoricalData(
+    symbol: string, 
+    requiredBars: number, 
+    timeframe: string
+  ): Promise<any[]> {
+    if (!this.binanceService) {
+      throw new Error('BinanceService not initialized');
+    }
+
+    const maxBarsPerRequest = 1000; // Binance limit
+    
+    if (requiredBars <= maxBarsPerRequest) {
+      // Single request is sufficient
+      return await this.binanceService.getHistoricalKlines({
+        symbol,
+        interval: timeframe as any,
+        limit: requiredBars
+      });
+    }
+
+    // Need multiple requests for large amounts of data
+    this.logger.info(`Fetching ${requiredBars} bars in chunks for ${symbol}`);
+    
+    const allData: any[] = [];
+    let remainingBars = requiredBars;
+    let endTime = Date.now();
+
+    while (remainingBars > 0 && allData.length < requiredBars) {
+      const barsToFetch = Math.min(remainingBars, maxBarsPerRequest);
+      
+      try {
+        const chunkData = await this.binanceService.getHistoricalKlines({
+          symbol,
+          interval: timeframe as any,
+          limit: barsToFetch,
+          endTime
+        });
+
+        if (chunkData.length === 0) {
+          this.logger.warn(`No more data available for ${symbol} after ${allData.length} bars`);
+          break;
+        }
+
+        // Prepend to maintain chronological order (oldest first)
+        allData.unshift(...chunkData);
+        
+        // Update endTime to the start of the oldest bar we just fetched
+        if (chunkData[0]) {
+          endTime = chunkData[0].openTime - 1;
+        }
+        remainingBars -= chunkData.length;
+
+        this.logger.debug(`Fetched ${chunkData.length} bars for ${symbol}, total: ${allData.length}/${requiredBars}`);
+
+        // Small delay to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (error) {
+        this.logger.error(`Failed to fetch chunk for ${symbol}`, { error });
+        break;
+      }
+    }
+
+    this.logger.info(`Fetched total ${allData.length} bars for ${symbol} (requested: ${requiredBars})`);
+    return allData;
   }
 
 }
