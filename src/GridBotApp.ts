@@ -24,9 +24,11 @@ import { ReportService } from './services/ReportService';
 import { Backtester } from './services/Backtester';
 import { PaperTrader } from './services/PaperTrader';
 import { LiveTrader } from './services/LiveTrader';
+import { StatusMonitor } from './services/StatusMonitor';
 import { Logger } from './utils/logger';
 import { TradingError, ConfigError } from './utils/errors';
 import { BacktestConfig } from './types/backtest';
+import { TradingSessionInfo } from './types/monitoring';
 
 type BotConfigType = z.infer<typeof BotConfigSchema>;
 
@@ -90,6 +92,7 @@ export class GridBotApp extends EventEmitter {
   private backtester?: Backtester;
   private paperTrader?: PaperTrader;
   private liveTrader?: LiveTrader;
+  private statusMonitor?: StatusMonitor;
   
   private state: AppState = AppState.INITIALIZING;
   private config: BotConfigType | null = null;
@@ -197,6 +200,21 @@ export class GridBotApp extends EventEmitter {
         throw new TradingError(`Unknown trade mode: ${mode}`);
       }
 
+      // Start status monitoring for live and paper modes
+      if ((mode === 'live' || mode === 'paper' || mode === 'papertrade') && this.statusMonitor && this.config) {
+        const sessionInfo: TradingSessionInfo = {
+          startTime: Date.now(),
+          initialBalance: this.config.maxBudget.amount,
+          initialPrices: this.getInitialPrices(),
+          mode: mode as 'live' | 'paper',
+          activeSymbols: this.config.symbols.map(s => s.pair),
+          sessionId: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        };
+
+        await this.statusMonitor.start(sessionInfo);
+        this.logger.info('📊 Status monitoring started');
+      }
+
       this.emit('started');
       this.logger.info('GridBot application started successfully');
       
@@ -240,6 +258,11 @@ export class GridBotApp extends EventEmitter {
       this.shutdownInitiated = true;
       this.setState(AppState.STOPPING);
       this.logger.info('Stopping GridBot application...');
+
+      // Stop status monitor
+      if (this.statusMonitor) {
+        this.statusMonitor.stop();
+      }
 
       // Stop active trader
       if (this.liveTrader) {
@@ -352,6 +375,14 @@ export class GridBotApp extends EventEmitter {
       // Initialize Report Service
       this.reportService = new ReportService(this.config.logging.reportDirectory);
 
+      // Initialize Status Monitor
+      this.statusMonitor = new StatusMonitor(this.config, {
+        displayInterval: 60000, // 1 minute
+        showSymbolDetails: true,
+        showStrategyMetrics: true,
+        showSystemMetrics: true
+      });
+
       this.logger.info('All services initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize services', { error });
@@ -392,11 +423,221 @@ export class GridBotApp extends EventEmitter {
         this.reportService
       );
 
+      // Startup data collection for live and paper modes
+      const mode = this.options.mode || this.config.tradeMode;
+      if (mode === 'live' || mode === 'paper' || mode === 'papertrade') {
+        await this.collectStartupData();
+      }
+
       this.logger.info('All traders initialized successfully');
       
     } catch (error) {
       throw new TradingError(`Failed to initialize traders: ${error instanceof Error ? error.message : error}`);
     }
+  }
+
+  /**
+   * Collect startup data and initialize strategies
+   */
+  private async collectStartupData(): Promise<void> {
+    if (!this.config || !this.binanceService || !this.strategyEngine) {
+      throw new Error('Required services not initialized');
+    }
+
+    this.logger.info('📊 Collecting startup data and initializing strategies...');
+
+    try {
+      // Record initial account balances for P&L tracking
+      const startupTime = Date.now();
+      let initialAccountValue = 0;
+      
+      try {
+        // Get initial balances for baseline tracking
+        const accountInfo = await this.binanceService.getAccountInfo();
+        if (accountInfo && accountInfo.balances) {
+          for (const balance of accountInfo.balances) {
+            if (parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0) {
+              const total = parseFloat(balance.free) + parseFloat(balance.locked);
+              this.logger.info(`💰 Initial Balance: ${balance.asset} = ${total.toFixed(8)}`);
+              
+              // Calculate USDT equivalent for initial portfolio value
+              if (balance.asset === 'USDT') {
+                initialAccountValue += total;
+              }
+              // TODO: Add price conversion for other assets
+            }
+          }
+        }
+      } catch (error) {
+        this.logger.warn('Could not fetch initial account balances:', error);
+      }
+
+      this.logger.info(`💼 Starting Portfolio Value: ~${initialAccountValue.toFixed(2)} USDT`);
+
+      // Initialize strategies for all symbols with comprehensive market data analysis
+      const symbolResults: Array<{
+        symbol: string;
+        currentPrice: number;
+        gridLevels: number;
+        eligible: boolean;
+        ema200: number;
+        gridInterval: number;
+        volatilityStatus: string;
+        eligibilityReason?: string;
+      }> = [];
+
+      for (const symbolConfig of this.config.symbols) {
+        const symbol = symbolConfig.pair;
+        
+        this.logger.info(`📈 Analyzing market data for ${symbol}...`);
+        
+        // Get comprehensive historical data for strategy initialization
+        const historicalData = await this.binanceService.getHistoricalData(
+          symbol,
+          '1h', // 1-hour intervals for better strategy calculation
+          500 // 500 periods for volatility analysis
+        );
+
+        if (historicalData.length === 0) {
+          this.logger.warn(`⚠️ No historical data available for ${symbol}, skipping...`);
+          symbolResults.push({
+            symbol,
+            currentPrice: 0,
+            gridLevels: 0,
+            eligible: false,
+            ema200: 0,
+            gridInterval: 0,
+            volatilityStatus: 'No Data',
+            eligibilityReason: 'No historical data available'
+          });
+          continue;
+        }
+
+        this.logger.info(`📊 Processing ${historicalData.length} historical candles for ${symbol}...`);
+
+        // Initialize strategy state
+        this.strategyEngine.initializeStrategy(symbol, historicalData);
+
+        // Get detailed strategy state and metrics
+        const currentPrice = historicalData[historicalData.length - 1]?.close || 0;
+        const state = this.strategyEngine.getStrategyState(symbol);
+        const metrics = this.strategyEngine.getMetrics(symbol);
+
+        // Determine eligibility status and reason
+        let eligibilityReason = 'Ready for trading';
+        let volatilityStatus = 'Unknown';
+        
+        if (metrics?.volatilityAnalysis) {
+          volatilityStatus = metrics.volatilityAnalysis.volatileBarRatio.toFixed(2);
+          if (!metrics.isEligibleForTrading && metrics.volatilityAnalysis.reason) {
+            eligibilityReason = metrics.volatilityAnalysis.reason;
+          }
+        }
+
+        // Store results for summary
+        const result = {
+          symbol,
+          currentPrice,
+          gridLevels: state?.gridLevels.length || 0,
+          eligible: metrics?.isEligibleForTrading || false,
+          ema200: state?.ema200 || 0,
+          gridInterval: state?.gridInterval || 0,
+          volatilityStatus
+        };
+
+        if (!metrics?.isEligibleForTrading && eligibilityReason !== 'Ready for trading') {
+          (result as any).eligibilityReason = eligibilityReason;
+        }
+
+        symbolResults.push(result);
+
+        // Log detailed initialization results
+        this.logger.info(`✅ Strategy analysis completed for ${symbol}`, {
+          currentPrice: currentPrice.toFixed(6),
+          ema200: (state?.ema200 || 0).toFixed(6),
+          gridLevels: state?.gridLevels.length || 0,
+          gridInterval: (state?.gridInterval || 0).toFixed(6),
+          eligible: metrics?.isEligibleForTrading || false,
+          volatilityRatio: metrics?.volatilityAnalysis?.volatileBarRatio.toFixed(3),
+          totalTrades: metrics?.totalTrades || 0,
+          winRate: `${((metrics?.winRate || 0) * 100).toFixed(1)}%`
+        });
+      }
+
+      // Display comprehensive startup summary
+      this.displayStartupSummary(symbolResults, initialAccountValue, startupTime);
+
+      // Initialize status monitor with required services and 1-minute intervals
+      if (this.statusMonitor) {
+        this.statusMonitor.initialize(this.strategyEngine, this.binanceService);
+      }
+
+      this.logger.info('🎯 Startup data collection completed successfully');
+
+    } catch (error) {
+      this.logger.error('❌ Failed to collect startup data:', error);
+      throw new TradingError(`Startup data collection failed: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * Display comprehensive startup summary
+   */
+  private displayStartupSummary(
+    symbolResults: Array<{
+      symbol: string;
+      currentPrice: number;
+      gridLevels: number;
+      eligible: boolean;
+      ema200: number;
+      gridInterval: number;
+      volatilityStatus: string;
+      eligibilityReason?: string;
+    }>,
+    initialAccountValue: number,
+    startupTime: number
+  ): void {
+    const eligibleSymbols = symbolResults.filter(r => r.eligible);
+    const totalGridLevels = symbolResults.reduce((sum, r) => sum + r.gridLevels, 0);
+    
+    console.log('\n🚀 ===== GRIDBOT STARTUP SUMMARY =====');
+    console.log(`⏰ Startup Time: ${new Date(startupTime).toLocaleString()}`);
+    console.log(`💼 Initial Portfolio: ${initialAccountValue.toFixed(2)} USDT`);
+    console.log(`📊 Trading Mode: ${this.config?.tradeMode?.toUpperCase() || 'UNKNOWN'}`);
+    console.log(`🎯 Symbols Analyzed: ${symbolResults.length}`);
+    console.log(`✅ Eligible for Trading: ${eligibleSymbols.length}`);
+    console.log(`🔢 Total Grid Levels: ${totalGridLevels}`);
+    
+    console.log('\n📈 SYMBOL STATUS:');
+    console.log('━'.repeat(80));
+    console.log('Symbol      | Price      | EMA200     | Grids | Status | Volatility');
+    console.log('━'.repeat(80));
+    
+    for (const result of symbolResults) {
+      const status = result.eligible ? '✅ Ready' : '❌ Not Ready';
+      const reason = result.eligibilityReason ? ` (${result.eligibilityReason})` : '';
+      
+      console.log(
+        `${result.symbol.padEnd(11)} | ` +
+        `${result.currentPrice.toFixed(4).padEnd(10)} | ` +
+        `${result.ema200.toFixed(4).padEnd(10)} | ` +
+        `${result.gridLevels.toString().padEnd(5)} | ` +
+        `${status.padEnd(6)} | ` +
+        `${result.volatilityStatus}${reason}`
+      );
+    }
+    
+    console.log('━'.repeat(80));
+    
+    if (eligibleSymbols.length > 0) {
+      console.log(`\n🟢 Ready to start trading with ${eligibleSymbols.length} eligible symbols!`);
+      console.log(`📊 Monitoring will display every minute with P&L updates.`);
+    } else {
+      console.log(`\n🟡 No symbols are currently eligible for trading.`);
+      console.log(`🔍 Check volatility conditions and market data quality.`);
+    }
+    
+    console.log('=====================================\n');
   }
 
   /**
@@ -448,21 +689,46 @@ export class GridBotApp extends EventEmitter {
       this.paperTrader!.on('order-filled', (order: any) => {
         this.emit('orderFilled', order);
         this.logger.info('Paper trade order filled', { order });
+        
+        // Send event to status monitor
+        if (this.statusMonitor) {
+          this.statusMonitor.addEvent('trade_executed', order.symbol, order, 
+            `Trade executed: ${order.side} ${order.quantity} ${order.symbol} at ${order.price}`);
+        }
       });
 
       this.paperTrader!.on('profit-realized', (profit: number, symbol: string) => {
         this.emit('profitRealized', { profit, symbol });
         this.logger.info('Paper trade profit realized', { profit, symbol });
+        
+        // Send event to status monitor
+        if (this.statusMonitor) {
+          const eventType = profit > 0 ? 'profit_realized' : 'loss_realized';
+          this.statusMonitor.addEvent(eventType, symbol, { profit }, 
+            `${profit > 0 ? 'Profit' : 'Loss'} realized: $${profit.toFixed(2)} on ${symbol}`);
+        }
       });
 
       this.paperTrader!.on('error', (error: any) => {
         this.emit('traderError', error);
         this.logger.error('Paper trader error:', error);
+        
+        // Send event to status monitor
+        if (this.statusMonitor) {
+          this.statusMonitor.addEvent('error_occurred', undefined, error, 
+            `Paper trader error: ${error instanceof Error ? error.message : error}`);
+        }
       });
 
       this.paperTrader!.on('status-update', (status: string) => {
         this.emit('statusUpdate', status);
         this.logger.info('Paper trader status update', { status });
+        
+        // Send event to status monitor
+        if (this.statusMonitor) {
+          this.statusMonitor.addEvent('status_update', undefined, { status }, 
+            `Paper trader status: ${status}`);
+        }
       });
 
       await this.paperTrader!.start();
@@ -506,6 +772,26 @@ export class GridBotApp extends EventEmitter {
       default:
         return null;
     }
+  }
+
+  /**
+   * Get initial prices for all symbols
+   */
+  private getInitialPrices(): Record<string, number> {
+    if (!this.strategyEngine || !this.config) {
+      return {};
+    }
+
+    const initialPrices: Record<string, number> = {};
+    
+    for (const symbolConfig of this.config.symbols) {
+      const state = this.strategyEngine.getStrategyState(symbolConfig.pair);
+      if (state) {
+        initialPrices[symbolConfig.pair] = state.currentPrice;
+      }
+    }
+
+    return initialPrices;
   }
 
   /**

@@ -143,6 +143,9 @@ export class LiveTrader {
       // Initialize trading for each symbol
       await this.initializeSymbols();
 
+      // Display initial trading setup summary
+      await this.displayInitialTradingStatus();
+
       // Start monitoring and reporting
       this.startOrderMonitoring();
       this.startPeriodicReporting();
@@ -887,10 +890,67 @@ export class LiveTrader {
   }
 
   /**
-   * Start periodic reporting
+   * Display initial trading status after setup
    */
+  private async displayInitialTradingStatus(): Promise<void> {
+    try {
+      const balances = await this.getAccountBalances();
+      const symbolsData: Array<{
+        symbol: string;
+        currentPrice: number;
+        eligible: boolean;
+        reason?: string;
+      }> = [];
+
+      console.log('\n🚀 ===== LIVE TRADING SETUP COMPLETE =====');
+      console.log(`⏰ Start Time: ${new Date().toLocaleString()}`);
+      console.log(`💰 Initial Balance: ${this.dailyStartBalance.toFixed(2)} USDT`);
+      
+      // Collect symbol information from strategy engine
+      for (const symbolConfig of this.config.symbols) {
+        const symbol = symbolConfig.pair;
+        // Since we don't have direct access to StrategyEngine here, we'll show basic info
+        symbolsData.push({
+          symbol,
+          currentPrice: 0, // Will be updated once market data flows
+          eligible: true,  // Assume eligible since we passed pre-flight checks
+        });
+      }
+
+      console.log(`🎯 Symbols Configured: ${symbolsData.length}`);
+      console.log(`📊 Strategy: Grid Trading`);
+      console.log(`⚠️ Mode: LIVE TRADING (Real Money)`);
+      console.log(`🔄 Monitoring: Every minute`);
+      
+      // Show current balances summary
+      const significantBalances = Object.entries(balances)
+        .filter(([_, balance]) => balance.total > 0.001)
+        .slice(0, 5);
+        
+      if (significantBalances.length > 0) {
+        console.log('\n💼 Current Balances:');
+        for (const [currency, balance] of significantBalances) {
+          console.log(`   ${currency}: ${balance.available.toFixed(8)} available + ${balance.onOrder.toFixed(8)} in orders`);
+        }
+      }
+      
+      console.log('\n🎯 Trading is now ACTIVE. Monitor console for updates every minute.');
+      console.log('=====================================\n');
+
+      // Send notification
+      await this.notificationService.sendNotification(
+        `🚀 LIVE Trading Setup Complete\n` +
+        `💰 Initial Balance: ${this.dailyStartBalance.toFixed(2)} USDT\n` +
+        `🎯 Symbols: ${symbolsData.length}\n` +
+        `⚠️ Mode: LIVE TRADING ACTIVE`
+      );
+
+    } catch (error) {
+      this.logger.error('Error displaying initial trading status:', error);
+    }
+  }
   private startPeriodicReporting(): void {
-    // Report status every hour
+    // Report status every minute for real-time monitoring
     setInterval(
       async () => {
         if (!this.isRunning) return;
@@ -901,8 +961,8 @@ export class LiveTrader {
           this.logger.error('Error generating status report:', error);
         }
       },
-      60 * 60 * 1000
-    ); // 1 hour
+      60 * 1000
+    ); // 1 minute
   }
 
   /**

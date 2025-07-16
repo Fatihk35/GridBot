@@ -48,7 +48,7 @@ const PaperTradingConfigSchema = z.object({
   initialBalance: z.number().positive().default(10000),
   currency: z.string().default('USDT'),
   enableReporting: z.boolean().default(true),
-  reportingInterval: z.number().int().positive().default(60), // minutes
+  reportingInterval: z.number().int().positive().default(1), // minutes - default 1 minute for real-time monitoring
   enableNotifications: z.boolean().default(true),
   slippageRate: z.number().nonnegative().default(0.001), // 0.1%
   latencyMs: z.number().int().nonnegative().default(100),
@@ -185,6 +185,9 @@ export class PaperTrader extends EventEmitter {
 
       // Subscribe to real-time market data
       await this.subscribeToMarketData();
+
+      // Display initial paper trading setup
+      await this.displayInitialTradingStatus();
 
       // Start periodic reporting if enabled
       if (this.paperConfig.enableReporting) {
@@ -731,6 +734,43 @@ export class PaperTrader extends EventEmitter {
     // For simplicity, we'll just return the base currency balance
     // In a real implementation, you'd convert all balances to a common currency
     return balances[this.paperConfig.currency] || 0;
+  }
+
+  /**
+   * Display initial paper trading status after setup
+   */
+  private async displayInitialTradingStatus(): Promise<void> {
+    try {
+      console.log('\n🎯 ===== PAPER TRADING SETUP COMPLETE =====');
+      console.log(`⏰ Start Time: ${new Date().toLocaleString()}`);
+      console.log(`💰 Virtual Balance: ${this.paperConfig.initialBalance.toFixed(2)} ${this.paperConfig.currency}`);
+      console.log(`🎯 Symbols Configured: ${this.config.symbols.length}`);
+      console.log(`📊 Strategy: Grid Trading (Virtual)`);
+      console.log(`💱 Mode: PAPER TRADING (No Real Money)`);
+      console.log(`🔄 Monitoring: Every minute`);
+      
+      // Show virtual balances
+      console.log('\n💼 Virtual Balances:');
+      for (const [currency, balance] of Object.entries(this.state.virtualBalances)) {
+        if (balance > 0.001) {
+          console.log(`   ${currency}: ${balance.toFixed(8)}`);
+        }
+      }
+      
+      console.log('\n🎯 Paper trading is now ACTIVE. Monitor console for virtual P&L updates.');
+      console.log('=========================================\n');
+
+      // Send notification
+      await this.notificationService.sendNotification(
+        `🎯 Paper Trading Setup Complete\n` +
+        `💰 Virtual Balance: ${this.paperConfig.initialBalance.toFixed(2)} ${this.paperConfig.currency}\n` +
+        `🎯 Symbols: ${this.config.symbols.length}\n` +
+        `💱 Mode: PAPER TRADING ACTIVE`
+      );
+
+    } catch (error) {
+      this.logger.error('Error displaying initial paper trading status:', error);
+    }
   }
 
   /**
