@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Logger } from '../utils/logger';
+import { Logger } from '../../utils/logger';
 
 // Mock fs module
 jest.mock('fs');

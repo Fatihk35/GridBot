@@ -68,11 +68,24 @@ describe('Backtesting Module', () => {
         binanceSecretKey: 'test-secret'
       },
       strategySettings: {
-        barCountForVolatility: 24,
+        gridLevelsCount: 20,
+        gridIntervalMethod: 'DailyBarDiff' as const,
+        atrPeriod: 14,
+        emaPeriod: 200,
+        emaDeviationThreshold: 0.05,
         minVolatilityPercentage: 0.01,
         minVolatileBarRatio: 0.5,
-        emaPeriod: 200,
-        emaDeviationThreshold: 0.05
+        barCountForVolatility: 24,
+        profitTargetMultiplier: 2,
+        dcaMultipliers: {
+          standard: 1,
+          moderate: 3,
+          aggressive: 4,
+        },
+        gridRecalculationIntervalHours: 48,
+        baseGridSizeUSDT: 1000,
+        commissionRate: 0.001,
+        timeframe: '1m',
       },
       binanceSettings: {
         testnet: true,

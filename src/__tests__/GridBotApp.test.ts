@@ -504,7 +504,7 @@ describe('GridBotApp', () => {
           startTime: new Date('2024-01-01').getTime(),
           endTime: new Date('2024-01-31').getTime(),
           symbols: ['BTCUSDT'],
-          interval: '1h',
+          interval: '1m',
           initialBalance: 1000,
           slippagePercentage: 0.001,
           enableDetailedLogging: true,
@@ -522,7 +522,7 @@ describe('GridBotApp', () => {
       expect(mockBacktester.runBacktest).toHaveBeenCalledWith(
         expect.objectContaining({
           symbols: ['BTCUSDT'],
-          interval: '1h',
+          interval: '1m',
           initialBalance: 1000
         })
       );

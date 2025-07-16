@@ -75,11 +75,24 @@ describe('BinanceService Basic Tests', () => {
         }
       ],
       strategySettings: {
+        gridLevelsCount: 10,
+        gridIntervalMethod: 'ATR' as const,
+        atrPeriod: 14,
+        profitTargetMultiplier: 1.5,
+        dcaMultipliers: {
+          standard: 1,
+          moderate: 1.2,
+          aggressive: 1.5
+        },
+        gridRecalculationIntervalHours: 24,
+        baseGridSizeUSDT: 100,
+        commissionRate: 0.001,
         barCountForVolatility: 24,
         minVolatilityPercentage: 0.01,
         minVolatileBarRatio: 0.3,
         emaPeriod: 200,
-        emaDeviationThreshold: 0.1
+        emaDeviationThreshold: 0.1,
+        timeframe: '1m'
       },
       logging: {
         enableConsoleOutput: false, // Disable console output for tests

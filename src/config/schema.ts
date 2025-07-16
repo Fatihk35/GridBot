@@ -56,6 +56,7 @@ const StrategySettingsConfigSchema = z.object({
   gridRecalculationIntervalHours: z.number().min(1).max(168).optional().default(48),
   baseGridSizeUSDT: z.number().min(100).max(10000).optional().default(1000),
   commissionRate: z.number().min(0).max(0.01).optional().default(0.001),
+  timeframe: z.string().optional().default('1m'), // Add timeframe to strategy settings
 });
 
 /**
@@ -219,6 +220,7 @@ export class ConfigValidator {
         gridRecalculationIntervalHours: 48,
         baseGridSizeUSDT: 1000,
         commissionRate: 0.001,
+        timeframe: '1m',
       },
       binanceSettings: {
         testnet: true,

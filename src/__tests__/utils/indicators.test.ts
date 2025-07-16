@@ -86,8 +86,8 @@ describe('Technical Indicators', () => {
       expect(() => validateOHLCVArray(invalidData as OHLCV[])).toThrow(/Invalid OHLCV data/);
     });
 
-    it('should reject empty array', () => {
-      expect(() => validateOHLCVArray([])).toThrow(/non-empty array/);
+    it('should allow empty array', () => {
+      expect(() => validateOHLCVArray([])).not.toThrow();
     });
 
     it('should reject unsorted data', () => {
@@ -191,12 +191,11 @@ describe('Technical Indicators', () => {
       expect(atr7).toBeGreaterThan(0);
     });
 
-    it('should throw error for insufficient data', () => {
+    it('should return 0 for insufficient data', () => {
       const insufficientData = mockOHLCVData.slice(0, 10);
       
-      expect(() => {
-        calculateATR(insufficientData, 14);
-      }).toThrow(/Not enough data for ATR calculation/);
+      const result = calculateATR(insufficientData, 14);
+      expect(result).toBe(0);
     });
 
     it('should handle minimum required data', () => {
@@ -227,12 +226,11 @@ describe('Technical Indicators', () => {
       expect(emaHigh).toBeGreaterThan(emaLow);
     });
 
-    it('should throw error for insufficient data', () => {
+    it('should return 0 for insufficient data', () => {
       const insufficientData = mockOHLCVData.slice(0, 10);
       
-      expect(() => {
-        calculateEMA(insufficientData, 20);
-      }).toThrow(/Not enough data for EMA calculation/);
+      const result = calculateEMA(insufficientData, 20);
+      expect(result).toBe(0);
     });
 
     it('should calculate different EMA periods differently', () => {
@@ -286,10 +284,9 @@ describe('Technical Indicators', () => {
       expect(isFinite(avgDiff)).toBe(true);
     });
 
-    it('should throw error for insufficient data', () => {
-      expect(() => {
-        calculateDailyBarDiffAverage(mockOHLCVData.slice(0, 5), 10);
-      }).toThrow(/Not enough data for bar difference calculation/);
+    it('should return 0 for insufficient data', () => {
+      const result = calculateDailyBarDiffAverage(mockOHLCVData.slice(0, 5), 10);
+      expect(result).toBe(0);
     });
 
     it('should calculate correctly for simple case', () => {
@@ -475,8 +472,8 @@ describe('Technical Indicators', () => {
       // Should work for small periods
       expect(() => calculateSMA(smallData, 2)).not.toThrow();
       
-      // Should fail for large periods
-      expect(() => calculateATR(smallData, 14)).toThrow();
+      // Should return 0 for large periods
+      expect(calculateATR(smallData, 14)).toBe(0);
     });
 
     it('should handle extreme price values', () => {

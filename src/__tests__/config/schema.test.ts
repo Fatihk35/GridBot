@@ -2,8 +2,8 @@
  * Tests for configuration schema validation
  */
 
-import { BotConfigSchema, ConfigValidator } from '../config/schema';
-import { BotConfig } from '../types';
+import { BotConfigSchema, ConfigValidator } from '../../config/schema';
+import { BotConfig } from '../../types';
 
 describe('BotConfigSchema', () => {
   let validConfig: any;
@@ -277,7 +277,7 @@ describe('ConfigValidator', () => {
       
       expect(result.success).toBe(false);
       expect(result.errors).toBeDefined();
-      expect(result.errors!.some(err => err.path.includes('maxBudget'))).toBe(true);
+      expect(result.errors!.some((err: any) => err.path.includes('maxBudget'))).toBe(true);
     });
   });
 

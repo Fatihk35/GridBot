@@ -2,9 +2,9 @@
  * Notification Service Unit Tests
  */
 
-import { NotificationService } from '../services/NotificationService';
-import { Logger } from '../utils/logger';
-import { BotConfigType } from '../config/schema';
+import { NotificationService } from '../../services/NotificationService';
+import { Logger } from '../../utils/logger';
+import { BotConfigType } from '../../config/schema';
 import TelegramBot from 'node-telegram-bot-api';
 
 // Mock dependencies

@@ -177,6 +177,9 @@ export class GridBotApp extends EventEmitter {
       this.setState(AppState.RUNNING);
       this.logger.info('Starting GridBot application...');
 
+      // Initialize strategies for all symbols *before* starting traders
+      await this.initializeAllStrategies();
+
       // Determine the actual mode to use
       const mode = this.options.mode || (this.config ? this.config.tradeMode : 'live');
 
@@ -200,24 +203,9 @@ export class GridBotApp extends EventEmitter {
         throw new TradingError(`Unknown trade mode: ${mode}`);
       }
 
-      // Start status monitoring for live and paper modes
-      if ((mode === 'live' || mode === 'paper' || mode === 'papertrade') && this.statusMonitor && this.config) {
-        const sessionInfo: TradingSessionInfo = {
-          startTime: Date.now(),
-          initialBalance: this.config.maxBudget.amount,
-          initialPrices: this.getInitialPrices(),
-          mode: mode as 'live' | 'paper',
-          activeSymbols: this.config.symbols.map(s => s.pair),
-          sessionId: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        };
-
-        await this.statusMonitor.start(sessionInfo);
-        this.logger.info('📊 Status monitoring started');
-      }
-
       this.emit('started');
-      this.logger.info('GridBot application started successfully');
-      
+      this.logger.info(`GridBot started in ${mode} mode`);
+
     } catch (error) {
       this.setState(AppState.ERROR);
       this.logger.error('Failed to start GridBot application:', error);
@@ -437,14 +425,14 @@ export class GridBotApp extends EventEmitter {
   }
 
   /**
-   * Collect startup data and initialize strategies
+   * Collect startup data and display summary
    */
   private async collectStartupData(): Promise<void> {
     if (!this.config || !this.binanceService || !this.strategyEngine) {
       throw new Error('Required services not initialized');
     }
 
-    this.logger.info('📊 Collecting startup data and initializing strategies...');
+    this.logger.info('📊 Collecting startup data and displaying trading summary...');
 
     try {
       // Record initial account balances for P&L tracking
@@ -474,7 +462,7 @@ export class GridBotApp extends EventEmitter {
 
       this.logger.info(`💼 Starting Portfolio Value: ~${initialAccountValue.toFixed(2)} USDT`);
 
-      // Initialize strategies for all symbols with comprehensive market data analysis
+      // Get strategy status for all symbols (strategies should already be initialized by initializeAllStrategies)
       const symbolResults: Array<{
         symbol: string;
         currentPrice: number;
@@ -489,49 +477,26 @@ export class GridBotApp extends EventEmitter {
       for (const symbolConfig of this.config.symbols) {
         const symbol = symbolConfig.pair;
         
-        this.logger.info(`📈 Analyzing market data for ${symbol}...`);
+        this.logger.info(`📈 Getting strategy status for ${symbol}...`);
         
-        // Get comprehensive historical data for strategy initialization
-        const historicalData = await this.binanceService.getHistoricalData(
-          symbol,
-          '1h', // 1-hour intervals for better strategy calculation
-          500 // 500 periods for volatility analysis
-        );
-
-        if (historicalData.length === 0) {
-          this.logger.warn(`⚠️ No historical data available for ${symbol}, skipping...`);
-          symbolResults.push({
-            symbol,
-            currentPrice: 0,
-            gridLevels: 0,
-            eligible: false,
-            ema200: 0,
-            gridInterval: 0,
-            volatilityStatus: 'No Data',
-            eligibilityReason: 'No historical data available'
-          });
-          continue;
-        }
-
-        this.logger.info(`📊 Processing ${historicalData.length} historical candles for ${symbol}...`);
-
-        // Initialize strategy state
-        this.strategyEngine.initializeStrategy(symbol, historicalData);
-
-        // Get detailed strategy state and metrics
-        const currentPrice = historicalData[historicalData.length - 1]?.close || 0;
+        // Get strategy state and metrics (strategies should already be initialized)
         const state = this.strategyEngine.getStrategyState(symbol);
         const metrics = this.strategyEngine.getMetrics(symbol);
 
         // Determine eligibility status and reason
         let eligibilityReason = 'Ready for trading';
         let volatilityStatus = 'Unknown';
+        let currentPrice = 0;
         
         if (metrics?.volatilityAnalysis) {
           volatilityStatus = metrics.volatilityAnalysis.volatileBarRatio.toFixed(2);
           if (!metrics.isEligibleForTrading && metrics.volatilityAnalysis.reason) {
             eligibilityReason = metrics.volatilityAnalysis.reason;
           }
+        }
+
+        if (state) {
+          currentPrice = state.currentPrice;
         }
 
         // Store results for summary
@@ -551,8 +516,8 @@ export class GridBotApp extends EventEmitter {
 
         symbolResults.push(result);
 
-        // Log detailed initialization results
-        this.logger.info(`✅ Strategy analysis completed for ${symbol}`, {
+        // Log detailed status
+        this.logger.info(`✅ Strategy status retrieved for ${symbol}`, {
           currentPrice: currentPrice.toFixed(6),
           ema200: (state?.ema200 || 0).toFixed(6),
           gridLevels: state?.gridLevels.length || 0,
@@ -873,6 +838,60 @@ export class GridBotApp extends EventEmitter {
       to: newState
     });
   }
+
+  /**
+   * Initialize strategies for all configured symbols.
+   * This method ensures that historical data is fetched and strategies are ready
+   * before any trading activity begins.
+   */
+  private async initializeAllStrategies(): Promise<void> {
+    if (!this.config || !this.strategyEngine || !this.binanceService) {
+      throw new Error('Required services not initialized');
+    }
+
+    for (const symbolConfig of this.config.symbols) {
+      const symbol = symbolConfig.pair;
+      
+      try {
+        // Get minimum data requirements from strategy engine
+        const requiredBars = Math.max(200, 500); // Need at least 200 for EMA, 500 for volatility analysis
+        
+        this.logger.info(`Fetching ${requiredBars} initial bars for ${symbol}...`);
+        
+        const historicalData = await this.binanceService.getHistoricalKlines({
+          symbol,
+          interval: (this.config.strategySettings.timeframe || '1m') as any,
+          limit: requiredBars
+        });
+
+        if (historicalData.length > 0) {
+          // Convert BinanceKline[] to CandlestickData[]
+          const candlestickData = historicalData.map(kline => ({
+            open: kline.open,
+            high: kline.high,
+            low: kline.low,
+            close: kline.close,
+            volume: kline.volume,
+            timestamp: kline.openTime
+          }));
+
+          // Initialize strategy with the converted data
+          this.strategyEngine.initializeStrategy(symbol, candlestickData);
+          this.logger.info(`Strategy initialized for ${symbol} with ${candlestickData.length} bars`);
+        } else {
+          this.logger.warn(`No historical data available for ${symbol}`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to fetch initial data for ${symbol}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        // Continue with other symbols instead of failing completely
+      }
+    }
+  }
+
 }
 
 export default GridBotApp;

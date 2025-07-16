@@ -147,6 +147,37 @@ export class StrategyEngine {
   private readonly logger: Logger;
   private readonly metrics: Map<string, StrategyMetrics> = new Map();
 
+  /**
+   * Check if sufficient data is available for calculation method
+   * @param historicalData Historical candlestick data
+   * @param method Calculation method to check
+   * @returns Object with availability status and required amount
+   */
+  private checkDataSufficiency(
+    historicalData: CandlestickData[],
+    method: 'ATR' | 'DailyBarDiff'
+  ): { sufficient: boolean; available: number; required: number; method: string } {
+    const available = historicalData.length;
+    
+    if (method === 'ATR') {
+      const required = this.strategyConfig.atrPeriod + 1;
+      return { 
+        sufficient: available >= required, 
+        available, 
+        required,
+        method: 'ATR'
+      };
+    } else {
+      const required = this.strategyConfig.barCountForVolatility;
+      return { 
+        sufficient: available >= required, 
+        available, 
+        required,
+        method: 'DailyBarDiff'
+      };
+    }
+  }
+
   constructor(config: BotConfigType, strategyConfig?: Partial<StrategyConfig>) {
     this.config = config;
     this.logger = Logger.getInstance();
@@ -173,10 +204,22 @@ export class StrategyEngine {
    */
   public initializeStrategy(symbol: string, historicalData: CandlestickData[]): void {
     try {
+      // Validate data sufficiency before initialization
+      const dataValidation = this.validateHistoricalDataSufficiency(historicalData);
+      
       this.logger.info(`Initializing strategy for ${symbol}`, {
         dataPoints: historicalData.length,
-        requiredPeriods: Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1
+        requiredPeriods: Math.max(this.strategyConfig.atrPeriod, this.strategyConfig.emaPeriod) + 1,
+        dataSufficiency: dataValidation
       });
+
+      if (!dataValidation.sufficient) {
+        this.logger.warn(`Limited data available for ${symbol} - some calculations may use fallback methods`, {
+          available: dataValidation.available,
+          requirements: dataValidation.requirements,
+          missingFor: dataValidation.missingFor
+        });
+      }
 
       // Calculate initial indicators - they will return 0 if insufficient data
       const atr = this.calculateGridInterval(
@@ -259,20 +302,48 @@ export class StrategyEngine {
     method: 'ATR' | 'DailyBarDiff'
   ): number {
     try {
+      // Check data sufficiency for requested method
+      const methodCheck = this.checkDataSufficiency(historicalData, method);
+      
       if (method === 'ATR') {
+        if (!methodCheck.sufficient) {
+          this.logger.debug('Insufficient data for ATR calculation', methodCheck);
+          return 0;
+        }
         return calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
       } else {
         // Daily Bar Difference method - İyileştirilmiş %51 kriteri
+        if (!methodCheck.sufficient) {
+          this.logger.debug('Insufficient data for Daily Bar Difference calculation, attempting ATR fallback', {
+            available: methodCheck.available,
+            required: methodCheck.required,
+            method: 'DailyBarDiff'
+          });
+          
+          // Check if we can fallback to ATR
+          const atrCheck = this.checkDataSufficiency(historicalData, 'ATR');
+          if (atrCheck.sufficient) {
+            const atrValue = calculateATR(convertToOHLCV(historicalData), this.strategyConfig.atrPeriod);
+            this.logger.debug('Grid interval calculated using ATR fallback', { 
+              atrValue,
+              originalMethod: 'DailyBarDiff',
+              fallbackMethod: 'ATR',
+              availableData: methodCheck.available,
+              requiredForDailyBarDiff: methodCheck.required
+            });
+            return atrValue;
+          } else {
+            this.logger.warn('Insufficient data for both calculation methods', {
+              dailyBarDiff: methodCheck,
+              atr: atrCheck,
+              minimumRequiredData: Math.max(methodCheck.required, atrCheck.required)
+            });
+            return 0;
+          }
+        }
+
         const barCount = this.strategyConfig.barCountForVolatility;
         const bars = historicalData.slice(-barCount);
-
-        if (bars.length < barCount) {
-          this.logger.warn('Insufficient data for Daily Bar Difference calculation', {
-            available: bars.length,
-            required: barCount
-          });
-          return 0;
-        }
 
         // Önce volatil barları belirle
         const volatileBars: CandlestickData[] = [];
@@ -975,5 +1046,65 @@ export class StrategyEngine {
     }
 
     return true;
+  }
+
+  /**
+   * Get minimum data requirements for the strategy
+   * @returns Object with minimum data requirements for different calculations
+   */
+  public getMinimumDataRequirements(): {
+    atr: number;
+    dailyBarDiff: number;
+    ema: number;
+    recommended: number;
+  } {
+    return {
+      atr: this.strategyConfig.atrPeriod + 1,
+      dailyBarDiff: this.strategyConfig.barCountForVolatility,
+      ema: this.strategyConfig.emaPeriod,
+      recommended: Math.max(
+        this.strategyConfig.barCountForVolatility,
+        this.strategyConfig.emaPeriod,
+        this.strategyConfig.atrPeriod + 1
+      )
+    };
+  }
+
+  /**
+   * Validate if historical data meets minimum requirements for strategy initialization
+   * @param historicalData Historical candlestick data
+   * @returns Validation result with details
+   */
+  public validateHistoricalDataSufficiency(historicalData: CandlestickData[]): {
+    sufficient: boolean;
+    available: number;
+    requirements: {
+      atr: number;
+      dailyBarDiff: number;
+      ema: number;
+      recommended: number;
+    };
+    missingFor: string[];
+  } {
+    const requirements = this.getMinimumDataRequirements();
+    const available = historicalData.length;
+    const missingFor: string[] = [];
+
+    if (available < requirements.atr) {
+      missingFor.push(`ATR calculation (need ${requirements.atr}, have ${available})`);
+    }
+    if (available < requirements.dailyBarDiff) {
+      missingFor.push(`Daily Bar Difference calculation (need ${requirements.dailyBarDiff}, have ${available})`);
+    }
+    if (available < requirements.ema) {
+      missingFor.push(`EMA calculation (need ${requirements.ema}, have ${available})`);
+    }
+
+    return {
+      sufficient: available >= requirements.recommended,
+      available,
+      requirements,
+      missingFor
+    };
   }
 }
