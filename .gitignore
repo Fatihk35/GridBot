@@ -29,3 +29,10 @@ node_modules/
 # tasks/ 
 dist/*
 reports/*
+.*clinerules
+.cursor
+.github
+.roo
+.taskmaster
+.trae
+.vscode
