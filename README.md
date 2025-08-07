@@ -67,14 +67,99 @@ npm run start:cli -- status
 ## Konfigürasyon
 Uygulamanın çalışması için `config/config.json` dosyasını doldurmanız gerekmektedir. Örnek ayarlar için `config/config.example.json` dosyasını inceleyebilirsiniz.
 
-Başlıca parametreler:
-- **tradeMode**: Çalışma modu (backtest, papertrade, live)
-- **exchange**: Kullanılan borsa (örn. binance)
-- **maxBudget**: Maksimum bütçe ve para birimi
-- **symbols**: İşlem yapılacak pariteler ve eşik değerleri
-- **apiKeys**: Binance ve Telegram API anahtarları
-- **strategySettings**: Stratejiye ait parametreler (grid seviyeleri, EMA, ATR, vs.)
-- **binanceSettings**: Binance testnet ve komisyon ayarları
-- **logging**: Log ve rapor ayarları
+### Ana Konfigürasyon Parametreleri
+
+#### Genel Ayarlar
+- **tradeMode**: Çalışma modu
+  - `"backtest"`: Geriye dönük test simülasyonu
+  - `"papertrade"`: Kağıt üzerinde ticaret simülasyonu
+  - `"live"`: Canlı ticaret
+- **exchange**: Borsa platformu (şu anda sadece `"binance"` destekleniyor)
+
+#### Bütçe Ayarları (maxBudget)
+- **amount**: Kullanılacak maksimum miktar (pozitif sayı)
+- **currency**: Para birimi (örn. `"USDT"`)
+
+#### İşlem Paritleri (symbols)
+Her parite için:
+- **pair**: İşlem çifti (örn. `"BTCUSDT"`)
+- **minDailyBarDiffThreshold**: Minimum günlük bar fark eşiği (pozitif sayı)
+- **gridSize**: Grid boyutu (opsiyonel, varsayılan: 100)
+- **pricePrecision**: Fiyat hassasiyeti (1-8 arası, varsayılan: 8)
+- **quantityPrecision**: Miktar hassasiyeti (1-8 arası, varsayılan: 8)
+
+#### API Anahtarları (apiKeys)
+- **binanceApiKey**: Binance API anahtarı (zorunlu)
+- **binanceSecretKey**: Binance gizli anahtarı (zorunlu)
+- **telegramBotToken**: Telegram bot token'ı (opsiyonel)
+- **telegramChatId**: Telegram chat ID'si (opsiyonel)
+
+#### Strateji Ayarları (strategySettings)
+- **gridLevelsCount**: Grid seviye sayısı (5-50 arası, varsayılan: 20)
+- **gridIntervalMethod**: Grid aralık yöntemi
+  - `"ATR"`: Average True Range
+  - `"DailyBarDiff"`: Günlük bar farkı (varsayılan)
+- **atrPeriod**: ATR periyodu (5-50 arası, varsayılan: 14)
+- **emaPeriod**: EMA periyodu (pozitif tamsayı, varsayılan: 200)
+- **emaDeviationThreshold**: EMA sapma eşiği (0.001-0.5 arası, varsayılan: 0.01)
+- **minVolatilityPercentage**: Minimum volatilite yüzdesi (0.001-0.1 arası, varsayılan: 0.003)
+- **minVolatileBarRatio**: Minimum volatil bar oranı (0.1-1 arası, varsayılan: 0.51)
+- **barCountForVolatility**: Volatilite için bar sayısı (10-1000 arası, varsayılan: 500)
+- **profitTargetMultiplier**: Kar hedefi çarpanı (1-10 arası, varsayılan: 2)
+- **dcaMultipliers**: DCA çarpanları
+  - **standard**: Standart çarpan (varsayılan: 1)
+  - **moderate**: Orta çarpan (varsayılan: 3)
+  - **aggressive**: Agresif çarpan (varsayılan: 4)
+- **gridRecalculationIntervalHours**: Grid yeniden hesaplama aralığı saat (1-168 arası, varsayılan: 48)
+- **baseGridSizeUSDT**: Temel grid boyutu USDT (100-10000 arası, varsayılan: 1000)
+- **commissionRate**: Komisyon oranı (0-0.01 arası, varsayılan: 0.001)
+- **timeframe**: Zaman dilimi (varsayılan: "1m")
+
+#### Binance Ayarları (binanceSettings)
+- **testnet**: Test ağı kullanımı (true/false)
+- **commissionRate**: Komisyon oranı (pozitif sayı)
+
+#### Log Ayarları (logging)
+- **enableConsoleOutput**: Konsol çıktısını etkinleştir (true/false)
+- **enableTelegramOutput**: Telegram çıktısını etkinleştir (true/false)
+- **reportDirectory**: Rapor dizini (boş olmayan string)
+- **transactionLogFileName**: İşlem log dosya adı (boş olmayan string)
+
+### Örnek Konfigürasyon
+```json
+{
+  "tradeMode": "backtest",
+  "exchange": "binance",
+  "maxBudget": {
+    "amount": 1000,
+    "currency": "USDT"
+  },
+  "symbols": [
+    {
+      "pair": "BTCUSDT",
+      "minDailyBarDiffThreshold": 0.01
+    }
+  ],
+  "apiKeys": {
+    "binanceApiKey": "your_api_key_here",
+    "binanceSecretKey": "your_secret_key_here"
+  },
+  "strategySettings": {
+    "gridLevelsCount": 20,
+    "emaPeriod": 200,
+    "minVolatilityPercentage": 0.003
+  },
+  "binanceSettings": {
+    "testnet": true,
+    "commissionRate": 0.001
+  },
+  "logging": {
+    "enableConsoleOutput": true,
+    "enableTelegramOutput": false,
+    "reportDirectory": "./reports",
+    "transactionLogFileName": "transactions.log"
+  }
+}
+```
 
 Daha fazla bilgi için: [docs/GridBot-Usage-Examples.md](docs/GridBot-Usage-Examples.md)
